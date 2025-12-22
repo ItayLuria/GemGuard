@@ -21,3 +21,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "GemGuard"
 include(":app")
+include(":app")
+ 
