@@ -1,5 +1,4 @@
 package com.gemguard.pages
-
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -18,7 +17,8 @@ fun Home() {
             .padding(20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Top
-    ) {
+    )
+    {
         Spacer(modifier = Modifier.height(40.dp))
 
         Text(
@@ -36,12 +36,14 @@ fun Home() {
                 .fillMaxWidth()
                 .height(120.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFFF3E5F5))
-        ) {
+        )
+        {
             Column(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            )
+            {
                 Text(text = "היהלומים שלי", fontSize = 18.sp)
                 Text(text = "💎 1,250", fontSize = 36.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF6A1B9A))
             }
