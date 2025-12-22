@@ -30,7 +30,6 @@ fun Home() {
 
         Spacer(modifier = Modifier.height(30.dp))
 
-        // כרטיס היהלומים
         Card(
             modifier = Modifier
                 .fillMaxWidth()
