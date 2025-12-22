@@ -1,12 +1,12 @@
 package com.gemguard
+
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.ui.Modifier
-import com.gemguard.pages.Home
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.gemguard.pages.*
 import com.gemguard.ui.theme.GemGuardTheme
 
 class MainActivity : ComponentActivity() {
@@ -14,12 +14,18 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             GemGuardTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                       )
-                {
-                    Home()
+                // יצירת הבקר שאחראי על הניווט
+                val navController = rememberNavController()
+
+                // הגדרת "מפת הדרכים" של האפליקציה
+                NavHost(
+                    navController = navController,
+                    startDestination = Screen.Home.route // המסך שמתחילים ממנו
+                ) {
+                    composable(Screen.Home.route) {
+                        Home(navController) // נשלח את הבקר לדף הבית
+                    }
+
                 }
             }
         }

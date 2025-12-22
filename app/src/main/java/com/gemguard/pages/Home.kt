@@ -10,7 +10,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun Home() {
+fun Home(navController: androidx.navigation.NavController) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -47,5 +47,11 @@ fun Home() {
                 Text(text = "💎 1,250", fontSize = 36.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF6A1B9A))
             }
         }
+    }
+    Button(
+        onClick = { navController.navigate(Screen.Tasks.route) },
+        modifier = Modifier.padding(top = 16.dp)
+    ) {
+        Text("למעבר למשימות")
     }
 }
