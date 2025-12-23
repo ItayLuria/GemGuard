@@ -252,7 +252,7 @@ fun PurchaseDialog(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                             colors = ButtonDefaults.buttonColors(
                                 // כאן השינוי לאפור בהיר במצב כהה
-                                containerColor = if (viewModel.isDarkMode.value) Color(0xFFDEDBDB) else Color(0xFFF1F8E9),
+                                containerColor = if (viewModel.isDarkMode.value) Color(0xFF4B4A4A) else Color(0xFFF1F8E9),
                                 contentColor = Color.Black // טקסט שחור לקריאות על אפור
                             ),
                             shape = RoundedCornerShape(14.dp)
