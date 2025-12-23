@@ -125,7 +125,18 @@ class GemViewModel : ViewModel() {
         allInstalledApps.clear()
         allInstalledApps.addAll(tempList)
     }
-
+    fun resetSetup(context: Context) {
+        val prefs = context.getSharedPreferences("GemGuardPrefs", Context.MODE_PRIVATE)
+        prefs.edit().apply {
+            putBoolean("setup_complete", false)
+            // אפשר גם לאפס את ה-PIN אם תרצה:
+            // putString("app_pin", "")
+            apply()
+        }
+        // עדכון ה-State כדי שה-UI יתעדכן מיד
+        setupStep.intValue = 1
+        isSetupCompleteState.value = false
+    }
     fun buyTimeForApp(packageName: String, minutes: Int, cost: Int, context: Context): Boolean {
         if (_diamonds.value >= cost) {
             _diamonds.value -= cost

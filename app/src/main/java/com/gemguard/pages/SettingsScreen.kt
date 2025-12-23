@@ -3,6 +3,7 @@ package com.gemguard.pages
 import android.content.*
 import android.net.Uri
 import android.provider.Settings
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -39,7 +40,7 @@ fun SettingsScreen(viewModel: GemViewModel) {
         Spacer(modifier = Modifier.height(20.dp))
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            // תצוגה ושפה
+            // --- נראות ושפה ---
             item { Text(if (isHebrew) "נראות ושפה" else "Appearance & Language", fontSize = 14.sp, color = Color.Gray) }
             item {
                 Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(15.dp)) {
@@ -66,7 +67,7 @@ fun SettingsScreen(viewModel: GemViewModel) {
                 }
             }
 
-            // אבטחה
+            // --- אבטחה ---
             item { Spacer(modifier = Modifier.height(10.dp)) }
             item { Text(if (isHebrew) "אבטחה וחסימות" else "Security & Blocking", fontSize = 14.sp, color = Color.Gray) }
             item {
@@ -78,6 +79,32 @@ fun SettingsScreen(viewModel: GemViewModel) {
                     )
                 }
             }
+
+            // --- מגזר Debug (לצורכי פיתוח בלבד) ---
+            item { Spacer(modifier = Modifier.height(20.dp)) }
+            item { Text(if (isHebrew) "תחזוקה ופיתוח" else "Maintenance & Debug", fontSize = 14.sp, color = Color.Gray) }
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(15.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f))
+                ) {
+                    ListItem(
+                        headlineContent = {
+                            Text(
+                                if (isHebrew) "איפוס סטאפ מחדש" else "Reset Setup",
+                                color = MaterialTheme.colorScheme.error,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        supportingContent = { Text(if (isHebrew) "מחזיר למסך ההגדרות הראשוניות" else "Returns to onboarding screens") },
+                        leadingContent = { Icon(Icons.Default.Refresh, null, tint = MaterialTheme.colorScheme.error) },
+                        modifier = Modifier.clickable { viewModel.resetSetup(context) }
+                    )
+                }
+            }
+
+            item { Spacer(modifier = Modifier.height(50.dp)) }
         }
     }
 
@@ -107,7 +134,7 @@ fun SettingsScreen(viewModel: GemViewModel) {
         )
     }
 
-    // דיאלוג Whitelist (כמו קודם, עם תרגום)
+    // דיאלוג Whitelist
     if (showWhitelistDialog) {
         AlertDialog(
             onDismissRequest = { showWhitelistDialog = false },
