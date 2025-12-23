@@ -140,7 +140,6 @@ fun AppStoreItem(
         } catch (e: Exception) { null }
     }
 
-    // הסרת הרקע האפור והמסגרת לחלוטין
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -252,8 +251,9 @@ fun PurchaseDialog(
                             },
                             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (viewModel.isDarkMode.value) Color(0xFF2D3748) else Color(0xFFF1F8E9),
-                                contentColor = if (viewModel.isDarkMode.value) Color.White else Color(0xFF1B5E20)
+                                // כאן השינוי לאפור בהיר במצב כהה
+                                containerColor = if (viewModel.isDarkMode.value) Color(0xFFDEDBDB) else Color(0xFFF1F8E9),
+                                contentColor = Color.Black // טקסט שחור לקריאות על אפור
                             ),
                             shape = RoundedCornerShape(14.dp)
                         ) {
