@@ -1,8 +1,6 @@
 package com.gemguard.pages
 
 import android.content.*
-import android.net.Uri
-import android.provider.Settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,7 +10,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -80,14 +77,34 @@ fun SettingsScreen(viewModel: GemViewModel) {
                 }
             }
 
-            // --- מגזר Debug (לצורכי פיתוח בלבד) ---
+            // --- אפשרויות מפתחים (חדש!) ---
             item { Spacer(modifier = Modifier.height(20.dp)) }
-            item { Text(if (isHebrew) "תחזוקה ופיתוח" else "Maintenance & Debug", fontSize = 14.sp, color = Color.Gray) }
+            item { Text(if (isHebrew) "אפשרויות מפתחים" else "Developer Options", fontSize = 14.sp, color = Color.Gray) }
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(15.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f))
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f))
+                ) {
+                    ListItem(
+                        headlineContent = { Text(if (isHebrew) "הוסף 1,000 Gems" else "Add 1,000 Gems") },
+                        supportingContent = { Text(if (isHebrew) "לצורכי בדיקה בלבד" else "For testing purposes only") },
+                        leadingContent = { Icon(Icons.Default.Diamond, null, tint = Color(0xFF2ECC71)) },
+                        modifier = Modifier.clickable {
+                            // שימוש בפונקציה הקיימת ב-ViewModel כדי להוסיף יהלומים
+                            viewModel.addDiamonds(1000, -1, context) // השתמשנו ב-id -1 כדי לא להתנגש במשימות
+                        }
+                    )
+                }
+            }
+
+            // --- מגזר תחזוקה ---
+            item { Spacer(modifier = Modifier.height(10.dp)) }
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(15.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f))
                 ) {
                     ListItem(
                         headlineContent = {
