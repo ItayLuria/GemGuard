@@ -4,10 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-// שים לב לייבוא המפורש כאן - זה מה שפותר את הבעיה בדרך כלל
 import androidx.compose.material.icons.filled.Diamond
 import androidx.compose.material.icons.filled.DirectionsRun
-import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -22,8 +20,6 @@ import com.gemguard.GemViewModel
 @Composable
 fun Home(viewModel: GemViewModel) {
     val emeraldColor = Color(0xFF2ECC71)
-    val darkEmerald = Color(0xFF1B5E20)
-    val lightGreenBg = Color(0xFFF1F8E9)
 
     Column(
         modifier = Modifier
@@ -37,12 +33,12 @@ fun Home(viewModel: GemViewModel) {
             text = "GemGuard",
             fontSize = 32.sp,
             fontWeight = FontWeight.ExtraBold,
-            color = darkEmerald
+            color = emeraldColor // שינוי צבע לכמו בחנות
         )
         Text(
             text = "הצעדים שלך שווים Gems",
             fontSize = 14.sp,
-            color = Color.Gray
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
         Spacer(modifier = Modifier.height(30.dp))
@@ -60,19 +56,9 @@ fun Home(viewModel: GemViewModel) {
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = Icons.Default.DirectionsRun,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(56.dp)
-                    )
+                    Icon(Icons.Default.DirectionsRun, null, tint = Color.White, modifier = Modifier.size(56.dp))
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "${viewModel.currentSteps.value}",
-                        fontSize = 58.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
+                    Text("${viewModel.currentSteps.value}", fontSize = 58.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     Text("צעדים היום", fontSize = 18.sp, color = Color.White.copy(alpha = 0.9f))
                 }
             }
@@ -80,11 +66,9 @@ fun Home(viewModel: GemViewModel) {
 
         Spacer(modifier = Modifier.height(25.dp))
 
-        // כרטיס Gems (אמרלד)
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = lightGreenBg)
+        // כרטיס Gems - ללא רקע אפור
+        Box(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
         ) {
             Row(
                 modifier = Modifier.padding(20.dp).fillMaxWidth(),
@@ -92,22 +76,17 @@ fun Home(viewModel: GemViewModel) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Diamond,
-                        contentDescription = null,
-                        tint = emeraldColor,
-                        modifier = Modifier.size(32.dp)
-                    )
+                    Icon(Icons.Default.Diamond, null, tint = emeraldColor, modifier = Modifier.size(32.dp))
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
-                        text = "Gems",
+                        "Gems",
                         fontSize = 22.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        color = darkEmerald
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
                 Text(
-                    text = "${viewModel.diamonds.value}",
+                    "${viewModel.diamonds.value}",
                     fontSize = 28.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = emeraldColor

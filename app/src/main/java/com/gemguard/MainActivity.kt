@@ -1,3 +1,4 @@
+// קובץ: MainActivity.kt
 package com.gemguard
 
 import android.app.AppOpsManager
@@ -34,14 +35,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // טעינת נתונים
         viewModel.initData(this)
-
-        // הגדרת חיישן צעדים (בלי לבקש הרשאה עדיין, זה יקרה ב-Setup)
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
-
         blockedAppPackage = intent.getStringExtra("blocked_app")
 
         setContent {
@@ -49,24 +45,22 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             val context = LocalContext.current
             val isHebrew = viewModel.language.value == "iw"
 
-            // בדיקת הרשאות חסימה בזמן אמת
             var hasUsagePermission by remember { mutableStateOf(isAccessGranted()) }
             var hasOverlayPermission by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
 
+            // שימוש ב-Theme שמושפע מה-ViewModel
             GemGuardTheme(darkTheme = viewModel.isDarkMode.value) {
                 val layoutDirection = if (isHebrew) LayoutDirection.Rtl else LayoutDirection.Ltr
 
                 CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
                     val navController = rememberNavController()
 
-                    // הפעלת שירות החסימה רק אם הכל מוכן
                     LaunchedEffect(isSetupComplete, hasUsagePermission, hasOverlayPermission) {
                         if (isSetupComplete && hasUsagePermission && hasOverlayPermission) {
                             context.startService(Intent(context, BlockService::class.java))
                         }
                     }
 
-                    // דיאלוג חסימה (אם האפליקציה נפתחה דרך ה-BlockService)
                     if (blockedAppPackage != null) {
                         AlertDialog(
                             onDismissRequest = { blockedAppPackage = null },
@@ -87,51 +81,55 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         )
                     }
 
-                    Scaffold(
-                        bottomBar = {
-                            if (isSetupComplete) {
-                                NavigationBar {
-                                    val screens = listOf(Screen.Home, Screen.Tasks, Screen.Store, Screen.Settings)
-                                    screens.forEach { screen ->
-                                        NavigationBarItem(
-                                            icon = { Icon(screen.icon, null) },
-                                            label = { Text(if (isHebrew) screen.title else screen.titleEn) },
-                                            selected = navController.currentBackStackEntryAsState().value?.destination?.route == screen.route,
-                                            onClick = {
-                                                navController.navigate(screen.route) {
-                                                    popUpTo(navController.graph.startDestinationId)
-                                                    launchSingleTop = true
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background // רקע דינמי
+                    ) {
+                        Scaffold(
+                            bottomBar = {
+                                if (isSetupComplete) {
+                                    NavigationBar {
+                                        val screens = listOf(Screen.Home, Screen.Tasks, Screen.Store, Screen.Settings)
+                                        screens.forEach { screen ->
+                                            NavigationBarItem(
+                                                icon = { Icon(screen.icon, null) },
+                                                label = { Text(if (isHebrew) screen.title else screen.titleEn) },
+                                                selected = navController.currentBackStackEntryAsState().value?.destination?.route == screen.route,
+                                                onClick = {
+                                                    navController.navigate(screen.route) {
+                                                        popUpTo(navController.graph.startDestinationId)
+                                                        launchSingleTop = true
+                                                    }
                                                 }
-                                            }
-                                        )
+                                            )
+                                        }
                                     }
                                 }
                             }
-                        }
-                    ) { padding ->
-                        NavHost(
-                            navController = navController,
-                            startDestination = if (isSetupComplete) Screen.Home.route else "setup",
-                            modifier = Modifier.padding(padding)
-                        ) {
-                            composable("setup") {
-                                SetupScreen(viewModel) {
-                                    viewModel.saveSettings(context)
-                                    navController.navigate(Screen.Home.route) {
-                                        popUpTo("setup") { inclusive = true }
+                        ) { padding ->
+                            NavHost(
+                                navController = navController,
+                                startDestination = if (isSetupComplete) Screen.Home.route else "setup",
+                                modifier = Modifier.padding(padding)
+                            ) {
+                                composable("setup") {
+                                    SetupScreen(viewModel) {
+                                        viewModel.saveSettings(context)
+                                        navController.navigate(Screen.Home.route) {
+                                            popUpTo("setup") { inclusive = true }
+                                        }
                                     }
                                 }
+                                composable(Screen.Home.route) { Home(viewModel) }
+                                composable(Screen.Store.route) { StoreScreen(viewModel) }
+                                composable(Screen.Tasks.route) { TasksScreen(viewModel) }
+                                composable(Screen.Settings.route) { SettingsScreen(viewModel = viewModel) }
                             }
-                            composable(Screen.Home.route) { Home(viewModel) }
-                            composable(Screen.Store.route) { StoreScreen(viewModel) }
-                            composable(Screen.Tasks.route) { TasksScreen(viewModel) }
-                            composable(Screen.Settings.route) { SettingsScreen(viewModel = viewModel) }
                         }
                     }
                 }
             }
 
-            // עדכון מצב ההרשאות כשחוזרים מההגדרות של המכשיר
             DisposableEffect(Unit) {
                 val observer = LifecycleEventObserver { _, event ->
                     if (event == Lifecycle.Event.ON_RESUME) {
@@ -145,7 +143,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
     }
 
-    // פונקציות עזר לבדיקת הרשאות
     private fun isAccessGranted(): Boolean {
         val appOps = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
         val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -157,7 +154,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         return mode == AppOpsManager.MODE_ALLOWED
     }
 
-    // נקרא מה-SetupScreen בשלב 2
     fun requestStepPermission(onNext: () -> Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED) {
@@ -165,18 +161,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
         }
         onNext()
-    }
-
-    // נקרא מה-SetupScreen בשלב 3
-    fun requestBlockingPermissions(onComplete: () -> Unit) {
-        if (!isAccessGranted()) {
-            startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
-        } else if (!Settings.canDrawOverlays(this)) {
-            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
-            startActivity(intent)
-        } else {
-            onComplete()
-        }
     }
 
     override fun onResume() {

@@ -40,7 +40,7 @@ fun StoreScreen(viewModel: GemViewModel) {
     var searchQuery by remember { mutableStateOf("") }
 
     val emeraldColor = Color(0xFF2ECC71)
-    val darkEmerald = Color(0xFF1B5E20)
+    val darkEmerald = if (viewModel.isDarkMode.value) Color(0xFFA9DFBF) else Color(0xFF1B5E20)
 
     var currentTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
@@ -66,12 +66,12 @@ fun StoreScreen(viewModel: GemViewModel) {
     val otherApps = filteredApps.filter { (viewModel.unlockedAppsTime[it.packageName] ?: 0L) <= currentTime }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("חנות Gems", fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, color = darkEmerald)
+        Text("חנות Gems", fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, color = emeraldColor)
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Diamond, null, tint = emeraldColor, modifier = Modifier.size(20.dp))
             Spacer(modifier = Modifier.width(6.dp))
-            Text("היתרה שלך: ${viewModel.diamonds.value} Gems", color = emeraldColor, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text("היתרה שלך: ${viewModel.diamonds.value} Gems", color = emeraldColor, fontWeight = FontWeight.Bold)
         }
 
         Spacer(modifier = Modifier.height(20.dp))
@@ -81,13 +81,9 @@ fun StoreScreen(viewModel: GemViewModel) {
             onValueChange = { searchQuery = it },
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("חפש אפליקציה...") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = emeraldColor) },
+            leadingIcon = { Icon(Icons.Default.Search, null, tint = emeraldColor) },
             shape = RoundedCornerShape(16.dp),
-            singleLine = true,
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = emeraldColor,
-                unfocusedBorderColor = Color.LightGray
-            )
+            singleLine = true
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -96,7 +92,7 @@ fun StoreScreen(viewModel: GemViewModel) {
             if (activeApps.isNotEmpty()) {
                 item { Text("אפליקציות פועלות", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = emeraldColor) }
                 items(activeApps, key = { it.packageName }) { app ->
-                    AppStoreItem(app, viewModel, statsMap, pm, true, emeraldColor, darkEmerald, currentTime) {
+                    AppStoreItem(app, viewModel, statsMap, pm, true, emeraldColor, currentTime) {
                         selectedAppForPurchase = it
                     }
                 }
@@ -104,9 +100,9 @@ fun StoreScreen(viewModel: GemViewModel) {
             }
 
             if (otherApps.isNotEmpty()) {
-                item { Text("כל האפליקציות", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = darkEmerald) }
+                item { Text("כל האפליקציות", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) }
                 items(otherApps, key = { it.packageName }) { app ->
-                    AppStoreItem(app, viewModel, statsMap, pm, false, emeraldColor, darkEmerald, currentTime) {
+                    AppStoreItem(app, viewModel, statsMap, pm, false, emeraldColor, currentTime) {
                         selectedAppForPurchase = it
                     }
                 }
@@ -127,7 +123,6 @@ fun AppStoreItem(
     pm: android.content.pm.PackageManager,
     isActive: Boolean,
     emeraldColor: Color,
-    darkEmerald: Color,
     currentTime: Long,
     onPurchaseClick: (GemViewModel.AppInfoData) -> Unit
 ) {
@@ -145,29 +140,31 @@ fun AppStoreItem(
         } catch (e: Exception) { null }
     }
 
+    // הסרת הרקע האפור והמסגרת לחלוטין
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = if (isActive) Color(0xFFE8F5E9) else Color.White),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isActive) emeraldColor.copy(alpha = 0.12f) else Color.Transparent
+        ),
         border = if (isActive) androidx.compose.foundation.BorderStroke(1.dp, emeraldColor) else null
     ) {
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             appIcon?.let { Image(bitmap = it, contentDescription = null, modifier = Modifier.size(48.dp).clip(CircleShape)) }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(app.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = darkEmerald)
+                Text(app.name, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 if (isActive && remainingMillis > 0) {
-                    val totalSeconds = remainingMillis / 1000
-                    val minutes = totalSeconds / 60
-                    val seconds = totalSeconds % 60
-                    Text("נותר: ${String.format("%02d:%02d", minutes, seconds)}", fontSize = 13.sp, color = emeraldColor, fontWeight = FontWeight.ExtraBold)
+                    val minutes = (remainingMillis / 1000) / 60
+                    val seconds = (remainingMillis / 1000) % 60
+                    Text("נותר: ${String.format("%02d:%02d", minutes, seconds)}", color = emeraldColor, fontWeight = FontWeight.ExtraBold)
                 } else {
                     val timeUsedMin = (statsMap[app.packageName]?.totalTimeInForeground ?: 0L) / 60000
-                    Text("שימוש היום: $timeUsedMin דק'", fontSize = 12.sp, color = Color.Gray)
+                    Text("שימוש היום: $timeUsedMin דק'", color = Color.Gray)
                 }
             }
             Button(onClick = { onPurchaseClick(app) }, colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)) {
-                Text(if (isActive) "הוסף" else "קנה")
+                Text(if (isActive) "הוסף" else "קנה", color = Color.White)
             }
         }
     }
@@ -186,7 +183,6 @@ fun PurchaseDialog(
     val pm = context.packageManager
     val timeUsedMin = (statsMap[app.packageName]?.totalTimeInForeground ?: 0L) / 60000
     val usagePenalty = (timeUsedMin / 30).toInt() * 10
-
     var showStatusMessage by remember { mutableStateOf<String?>(null) }
     var isSuccess by remember { mutableStateOf(false) }
 
@@ -203,16 +199,12 @@ fun PurchaseDialog(
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(450.dp),
+            modifier = Modifier.fillMaxWidth().height(480.dp),
             shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White)
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
+                modifier = Modifier.fillMaxSize().padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
@@ -224,29 +216,15 @@ fun PurchaseDialog(
                         modifier = Modifier.size(80.dp)
                     )
                     Spacer(modifier = Modifier.height(20.dp))
-                    Text(
-                        text = showStatusMessage!!,
-                        textAlign = TextAlign.Center,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 20.sp,
-                        lineHeight = 28.sp,
-                        color = darkEmerald
-                    )
+                    Text(showStatusMessage!!, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                     Spacer(modifier = Modifier.height(30.dp))
-                    Button(
-                        onClick = onDismiss,
-                        modifier = Modifier.fillMaxWidth(0.7f),
-                        colors = ButtonDefaults.buttonColors(containerColor = darkEmerald),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("סגור", fontWeight = FontWeight.Bold)
+                    Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)) {
+                        Text("סגור")
                     }
                 } else {
-                    appIcon?.let {
-                        Image(bitmap = it, contentDescription = null, modifier = Modifier.size(72.dp).clip(CircleShape))
-                    }
+                    appIcon?.let { Image(bitmap = it, contentDescription = null, modifier = Modifier.size(72.dp).clip(CircleShape)) }
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text(app.name, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = darkEmerald)
+                    Text(app.name, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     Text("בחר חבילת זמן", color = Color.Gray)
 
                     Spacer(modifier = Modifier.height(20.dp))
@@ -265,15 +243,18 @@ fun PurchaseDialog(
                                 if (viewModel.diamonds.value >= finalPrice) {
                                     viewModel.buyTimeForApp(app.packageName, mins, finalPrice, context)
                                     isSuccess = true
-                                    showStatusMessage = "הרכישה בוצעה!\nתהנה מ-$label ב-${app.name}"
+                                    showStatusMessage = "הרכישה בוצעה!\nתהנה מ-$label"
                                 } else {
                                     val missing = finalPrice - viewModel.diamonds.value
                                     isSuccess = false
-                                    showStatusMessage = "אין לך מספיק Gems\nחסר לך עוד $missing Gems"
+                                    showStatusMessage = "אין לך מספיק Gems..\nחסר לך עוד $missing"
                                 }
                             },
                             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF1F8E9), contentColor = darkEmerald),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (viewModel.isDarkMode.value) Color(0xFF2D3748) else Color(0xFFF1F8E9),
+                                contentColor = if (viewModel.isDarkMode.value) Color.White else Color(0xFF1B5E20)
+                            ),
                             shape = RoundedCornerShape(14.dp)
                         ) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
