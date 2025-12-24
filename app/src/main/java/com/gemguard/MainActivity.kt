@@ -15,24 +15,29 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.animation.*
-import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Diamond
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.drawable.toBitmap
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.*
@@ -47,12 +52,15 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var sensorManager: SensorManager
     private var stepSensor: Sensor? = null
 
+    private val emeraldColor = Color(0xFF2ECC71)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         viewModel.initData(this)
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
-        blockedAppPackage = intent.getStringExtra("blocked_app")
+
+        handleIntent(intent)
 
         setContent {
             val isSetupComplete = viewModel.isSetupCompleteState.value
@@ -64,7 +72,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             var hasOverlayPermission by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
 
             GemGuardTheme(darkTheme = isDark) {
-                // קביעת כיוון הממשק (RTL לעברית, LTR לאנגלית)
                 val layoutDirection = if (isHebrew) LayoutDirection.Rtl else LayoutDirection.Ltr
 
                 CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
@@ -76,12 +83,67 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         }
                     }
 
-                    // הודעת חסימת אפליקציה מתורגמת
-                    if (blockedAppPackage != null) {
+                    // תצוגת פופ-אפ חסימה משופרת
+                    blockedAppPackage?.let { pkg ->
+                        val appName = getAppName(context, pkg)
+                        val appIcon = getAppIcon(context, pkg)
+
                         AlertDialog(
                             onDismissRequest = { blockedAppPackage = null },
-                            title = { Text(if (isHebrew) "אפליקציה חסומה" else "App Blocked") },
-                            text = { Text(if (isHebrew) "רוצה לקנות זמן ב-Gems?" else "Want to buy time with Gems?") },
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            titleContentColor = MaterialTheme.colorScheme.onSurface,
+                            textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            icon = {
+                                Box(modifier = Modifier.size(100.dp)) {
+                                    if (appIcon != null) {
+                                        Image(
+                                            bitmap = appIcon.toBitmap().asImageBitmap(),
+                                            contentDescription = null,
+                                            modifier = Modifier
+                                                .size(80.dp)
+                                                .align(Alignment.Center)
+                                                .background(
+                                                    color = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.05f),
+                                                    shape = RoundedCornerShape(20.dp)
+                                                )
+                                                .padding(12.dp)
+                                        )
+                                    }
+
+                                    // מנעול צף עם רקע כדי להבליט אותו
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.surface,
+                                        shape = CircleShape,
+                                        modifier = Modifier
+                                            .align(Alignment.BottomEnd)
+                                            .offset(x = 5.dp, y = 5.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Lock,
+                                            contentDescription = null,
+                                            tint = emeraldColor,
+                                            modifier = Modifier.padding(4.dp).size(28.dp)
+                                        )
+                                    }
+                                }
+                            },
+                            title = {
+                                Text(
+                                    text = if (isHebrew) "אפליקציית $appName נעולה" else "$appName is Locked",
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            },
+                            text = {
+                                Text(
+                                    text = if (isHebrew) "זמן השימוש נגמר. רוצה לקנות זמן נוסף ב-Gems?" else "Time is up. Want to buy more time with Gems?",
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    lineHeight = 20.sp
+                                )
+                            },
                             confirmButton = {
                                 Button(
                                     onClick = {
@@ -92,14 +154,26 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                                             restoreState = true
                                         }
                                     },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2ECC71), contentColor = Color.White)
-                                ) { Text(if (isHebrew) "חנות" else "Store") }
+                                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = emeraldColor),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text(
+                                        if (isHebrew) "לחנות ה-Gems" else "Go to Store",
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             },
                             dismissButton = {
-                                TextButton(onClick = {
-                                    blockedAppPackage = null
-                                    startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME))
-                                }) { Text(if (isHebrew) "סגור" else "Close") }
+                                TextButton(
+                                    onClick = { blockedAppPackage = null },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        if (isHebrew) "סגור" else "Close",
+                                        color = if (isDark) Color.White.copy(alpha = 0.6f) else Color.Gray
+                                    )
+                                }
                             }
                         )
                     }
@@ -109,35 +183,21 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         color = MaterialTheme.colorScheme.background
                     ) {
                         Scaffold(
-                            topBar = {
-                                if (isSetupComplete) {
-                                    GlobalTopBar(viewModel, navController)
-                                }
-                            },
-                            bottomBar = {
-                                if (isSetupComplete) {
-                                    MyBottomNavigationBar(navController, viewModel, isHebrew)
-                                }
-                            }
+                            topBar = { if (isSetupComplete) GlobalTopBar(viewModel, navController) },
+                            bottomBar = { if (isSetupComplete) MyBottomNavigationBar(navController, viewModel, isHebrew) }
                         ) { padding ->
                             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
                                 NavHost(
                                     navController = navController,
-                                    startDestination = if (isSetupComplete) Screen.Home.route else "setup",
-                                    enterTransition = { fadeIn(animationSpec = tween(300)) + scaleIn(initialScale = 0.95f, animationSpec = tween(300)) },
-                                    exitTransition = { fadeOut(animationSpec = tween(300)) }
+                                    startDestination = if (isSetupComplete) Screen.Home.route else "setup"
                                 ) {
                                     composable("setup") {
                                         SetupScreen(viewModel) {
                                             viewModel.saveSettings(context)
-                                            navController.navigate(Screen.Home.route) {
-                                                popUpTo("setup") { inclusive = true }
-                                            }
+                                            navController.navigate(Screen.Home.route) { popUpTo("setup") { inclusive = true } }
                                         }
                                     }
-                                    composable(Screen.Home.route) {
-                                        Home(viewModel, onNavigateToStore = { navController.navigate(Screen.Store.route) })
-                                    }
+                                    composable(Screen.Home.route) { Home(viewModel, onNavigateToStore = { navController.navigate(Screen.Store.route) }) }
                                     composable(Screen.Store.route) { StoreScreen(viewModel) }
                                     composable(Screen.Tasks.route) { TasksScreen(viewModel) }
                                     composable(Screen.Settings.route) { SettingsScreen(viewModel) }
@@ -158,6 +218,34 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 lifecycle.addObserver(observer)
                 onDispose { lifecycle.removeObserver(observer) }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        blockedAppPackage = intent?.getStringExtra("blocked_app")
+    }
+
+    private fun getAppName(context: Context, packageName: String): String {
+        return try {
+            val pm = context.packageManager
+            val info = pm.getApplicationInfo(packageName, 0)
+            pm.getApplicationLabel(info).toString()
+        } catch (e: Exception) {
+            packageName.split(".").last().replaceFirstChar { it.uppercase() }
+        }
+    }
+
+    private fun getAppIcon(context: Context, packageName: String): android.graphics.drawable.Drawable? {
+        return try {
+            context.packageManager.getApplicationIcon(packageName)
+        } catch (e: Exception) {
+            null
         }
     }
 
@@ -194,10 +282,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         stepSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
     }
 
-    override fun onSensorChanged(e: SensorEvent?) {
-        e?.let { viewModel.updateStepsWithContext(it.values[0].toInt(), this) }
-    }
-
+    override fun onSensorChanged(e: SensorEvent?) { e?.let { viewModel.updateStepsWithContext(it.values[0].toInt(), this) } }
     override fun onAccuracyChanged(p0: Sensor?, p1: Int) {}
 }
 
@@ -210,52 +295,23 @@ fun GlobalTopBar(viewModel: GemViewModel, navController: NavHostController) {
 
     Column {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(barColor)
-                .statusBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+            modifier = Modifier.fillMaxWidth().background(barColor).statusBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "GemGuard",
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 19.sp,
-                color = if (isDark) Color.White else Color.Black
-            )
-
+            Text(text = "GemGuard", fontWeight = FontWeight.ExtraBold, fontSize = 19.sp, color = if (isDark) Color.White else Color.Black)
             Surface(
                 color = if (isDark) Color(0xFF2C2C2C) else Color(0xFFF0F0F0),
                 shape = RoundedCornerShape(8.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, borderColor)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
-                        onClick = {
-                            navController.navigate(Screen.Tasks.route) {
-                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        modifier = Modifier.size(32.dp)
-                    ) {
+                    IconButton(onClick = { navController.navigate(Screen.Tasks.route) { launchSingleTop = true } }, modifier = Modifier.size(32.dp)) {
                         Icon(Icons.Default.Add, "Add", tint = emeraldColor, modifier = Modifier.size(18.dp))
                     }
-
                     Box(modifier = Modifier.width(1.dp).height(18.dp).background(borderColor))
-
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "${viewModel.diamonds.value}",
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isDark) Color.White else Color.Black
-                        )
+                    Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "${viewModel.diamonds.value}", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = if (isDark) Color.White else Color.Black)
                         Spacer(modifier = Modifier.width(6.dp))
                         Icon(Icons.Default.Diamond, null, tint = emeraldColor, modifier = Modifier.size(16.dp))
                     }
@@ -288,18 +344,11 @@ fun MyBottomNavigationBar(navController: NavHostController, viewModel: GemViewMo
                         navController.navigate(screen.route) {
                             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                             launchSingleTop = true
-                            restoreState = true
                         }
                     }
                 },
                 icon = { Icon(screen.icon, null, tint = if (isSelected) emeraldColor else unselectedColor) },
-                label = {
-                    Text(
-                        text = if (isHebrew) screen.title else screen.titleEn,
-                        color = if (isSelected) selectedContentColor else unselectedColor,
-                        fontSize = 11.sp
-                    )
-                },
+                label = { Text(text = if (isHebrew) screen.title else screen.titleEn, color = if (isSelected) selectedContentColor else unselectedColor, fontSize = 11.sp) },
                 colors = NavigationBarItemDefaults.colors(indicatorColor = Color.Transparent)
             )
         }
