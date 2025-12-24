@@ -19,10 +19,13 @@ val LightEmerald = Color(0xFFE8F5E9)
 
 private val DarkColorScheme = darkColorScheme(
     primary = EmeraldGreen,
+    onPrimary = Color.White,   // זה יבטיח שהטקסט על הכפתורים הירוקים יהיה לבן ולא סגול/שחור
     secondary = DarkEmerald,
+    onSecondary = Color.White,
     tertiary = Color(0xFF81C784),
-    background = Color(0xFF121212),
-    surface = Color(0xFF1E1E1E)
+    background = Color(0xFF181818),
+    surface = Color(0xFF1E1E1E),
+    onSurface = Color.White    // טקסט כללי על משטחים כהים
 )
 
 private val LightColorScheme = lightColorScheme(
@@ -34,7 +37,7 @@ private val LightColorScheme = lightColorScheme(
     onPrimary = Color.White,
     onSecondary = Color.White,
     onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F)
+    onSurface = Color(0xFF413E46)
 )
 
 @Composable

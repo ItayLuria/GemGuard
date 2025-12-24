@@ -1,9 +1,12 @@
 package com.gemguard
 
-import android.app.AppOpsManager
 import android.Manifest
-import android.content.*
 import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import android.app.AppOpsManager
+import android.content.*
 import android.hardware.*
 import android.net.Uri
 import android.os.*
@@ -11,6 +14,8 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,8 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.*
 import com.gemguard.pages.*
@@ -60,6 +64,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             var hasOverlayPermission by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
 
             GemGuardTheme(darkTheme = isDark) {
+                // קביעת כיוון הממשק (RTL לעברית, LTR לאנגלית)
                 val layoutDirection = if (isHebrew) LayoutDirection.Rtl else LayoutDirection.Ltr
 
                 CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
@@ -71,16 +76,24 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         }
                     }
 
+                    // הודעת חסימת אפליקציה מתורגמת
                     if (blockedAppPackage != null) {
                         AlertDialog(
                             onDismissRequest = { blockedAppPackage = null },
                             title = { Text(if (isHebrew) "אפליקציה חסומה" else "App Blocked") },
                             text = { Text(if (isHebrew) "רוצה לקנות זמן ב-Gems?" else "Want to buy time with Gems?") },
                             confirmButton = {
-                                Button(onClick = {
-                                    blockedAppPackage = null
-                                    navController.navigate(Screen.Store.route)
-                                }) { Text(if (isHebrew) "חנות" else "Store") }
+                                Button(
+                                    onClick = {
+                                        blockedAppPackage = null
+                                        navController.navigate(Screen.Store.route) {
+                                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2ECC71), contentColor = Color.White)
+                                ) { Text(if (isHebrew) "חנות" else "Store") }
                             },
                             dismissButton = {
                                 TextButton(onClick = {
@@ -110,7 +123,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
                                 NavHost(
                                     navController = navController,
-                                    startDestination = if (isSetupComplete) Screen.Home.route else "setup"
+                                    startDestination = if (isSetupComplete) Screen.Home.route else "setup",
+                                    enterTransition = { fadeIn(animationSpec = tween(300)) + scaleIn(initialScale = 0.95f, animationSpec = tween(300)) },
+                                    exitTransition = { fadeOut(animationSpec = tween(300)) }
                                 ) {
                                     composable("setup") {
                                         SetupScreen(viewModel) {
@@ -120,10 +135,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                                             }
                                         }
                                     }
-                                    composable(Screen.Home.route) { Home(viewModel) }
+                                    composable(Screen.Home.route) {
+                                        Home(viewModel, onNavigateToStore = { navController.navigate(Screen.Store.route) })
+                                    }
                                     composable(Screen.Store.route) { StoreScreen(viewModel) }
                                     composable(Screen.Tasks.route) { TasksScreen(viewModel) }
-                                    composable(Screen.Settings.route) { SettingsScreen(viewModel = viewModel) }
+                                    composable(Screen.Settings.route) { SettingsScreen(viewModel) }
                                 }
                             }
                         }
@@ -164,6 +181,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         onNext()
     }
 
+    fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
+            }
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         stepSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
@@ -190,10 +215,9 @@ fun GlobalTopBar(viewModel: GemViewModel, navController: NavHostController) {
                 .background(barColor)
                 .statusBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween, // מחזיר את הלוגו לשמאל/ימין ואת הקפסולה לצד השני
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // לוגו GemGuard בצד
             Text(
                 text = "GemGuard",
                 fontWeight = FontWeight.ExtraBold,
@@ -201,7 +225,6 @@ fun GlobalTopBar(viewModel: GemViewModel, navController: NavHostController) {
                 color = if (isDark) Color.White else Color.Black
             )
 
-            // הקפסולה המאוחדת בצד השני
             Surface(
                 color = if (isDark) Color(0xFF2C2C2C) else Color(0xFFF0F0F0),
                 shape = RoundedCornerShape(8.dp),
@@ -209,23 +232,19 @@ fun GlobalTopBar(viewModel: GemViewModel, navController: NavHostController) {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
-                        onClick = { navController.navigate(Screen.Tasks.route) },
+                        onClick = {
+                            navController.navigate(Screen.Tasks.route) {
+                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
                         modifier = Modifier.size(32.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "Add",
-                            tint = emeraldColor,
-                            modifier = Modifier.size(18.dp)
-                        )
+                        Icon(Icons.Default.Add, "Add", tint = emeraldColor, modifier = Modifier.size(18.dp))
                     }
 
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .height(18.dp)
-                            .background(borderColor)
-                    )
+                    Box(modifier = Modifier.width(1.dp).height(18.dp).background(borderColor))
 
                     Row(
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -238,12 +257,7 @@ fun GlobalTopBar(viewModel: GemViewModel, navController: NavHostController) {
                             color = if (isDark) Color.White else Color.Black
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Icon(
-                            imageVector = Icons.Default.Diamond,
-                            contentDescription = null,
-                            tint = emeraldColor,
-                            modifier = Modifier.size(16.dp)
-                        )
+                        Icon(Icons.Default.Diamond, null, tint = emeraldColor, modifier = Modifier.size(16.dp))
                     }
                 }
             }
@@ -251,54 +265,42 @@ fun GlobalTopBar(viewModel: GemViewModel, navController: NavHostController) {
         HorizontalDivider(color = borderColor, thickness = 1.dp)
     }
 }
+
 @Composable
 fun MyBottomNavigationBar(navController: NavHostController, viewModel: GemViewModel, isHebrew: Boolean) {
-    val navBackgroundColor = if (viewModel.isDarkMode.value) Color(0xFF1F1F1F) else Color.White
-    val contentColor = if (viewModel.isDarkMode.value) Color.White else Color.Black
-    val selectedIndicatorColor = if (viewModel.isDarkMode.value) Color(0xFF333333) else Color(0xFFF0F0F0)
+    val emeraldColor = Color(0xFF2ECC71)
+    val isDark = viewModel.isDarkMode.value
+    val navBackgroundColor = if (isDark) Color(0xFF1A1A1A) else Color.White
+    val unselectedColor = if (isDark) Color.White.copy(alpha = 0.5f) else Color.Black.copy(alpha = 0.4f)
+    val selectedContentColor = if (isDark) Color.White else Color.Black
 
-    NavigationBar(containerColor = navBackgroundColor, tonalElevation = 8.dp) {
+    NavigationBar(containerColor = navBackgroundColor, tonalElevation = 0.dp) {
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = navBackStackEntry?.destination?.route
         val screens = listOf(Screen.Home, Screen.Tasks, Screen.Store, Screen.Settings)
 
         screens.forEach { screen ->
             val isSelected = currentRoute == screen.route
-
             NavigationBarItem(
                 selected = isSelected,
                 onClick = {
-                    // תיקון: אם אנחנו כבר במסך הזה, אל תנווט שוב (מונע תקיעות)
                     if (currentRoute != screen.route) {
                         navController.navigate(screen.route) {
-                            popUpTo(navController.graph.startDestinationId) { saveState = true }
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                             launchSingleTop = true
                             restoreState = true
                         }
                     }
                 },
-                icon = {
-                    Icon(
-                        imageVector = screen.icon,
-                        contentDescription = null,
-                        tint = if (isSelected) contentColor else contentColor.copy(alpha = 0.5f)
-                    )
-                },
+                icon = { Icon(screen.icon, null, tint = if (isSelected) emeraldColor else unselectedColor) },
                 label = {
                     Text(
                         text = if (isHebrew) screen.title else screen.titleEn,
-                        color = if (isSelected) contentColor else contentColor.copy(alpha = 0.5f),
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        fontSize = 12.sp
+                        color = if (isSelected) selectedContentColor else unselectedColor,
+                        fontSize = 11.sp
                     )
                 },
-                colors = NavigationBarItemDefaults.colors(
-                    indicatorColor = selectedIndicatorColor,
-                    selectedIconColor = contentColor,
-                    unselectedIconColor = contentColor.copy(alpha = 0.5f),
-                    selectedTextColor = contentColor,
-                    unselectedTextColor = contentColor.copy(alpha = 0.5f)
-                )
+                colors = NavigationBarItemDefaults.colors(indicatorColor = Color.Transparent)
             )
         }
     }

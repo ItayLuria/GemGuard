@@ -35,6 +35,7 @@ fun StoreScreen(viewModel: GemViewModel) {
     val context = LocalContext.current
     val pm = context.packageManager
     val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+    val isHebrew = viewModel.language.value == "iw" // תמיכה בשפה
 
     var selectedAppForPurchase by remember { mutableStateOf<GemViewModel.AppInfoData?>(null) }
     var searchQuery by remember { mutableStateOf("") }
@@ -42,36 +43,46 @@ fun StoreScreen(viewModel: GemViewModel) {
     val emeraldColor = Color(0xFF2ECC71)
     val darkEmerald = if (viewModel.isDarkMode.value) Color(0xFFA9DFBF) else Color(0xFF1B5E20)
 
-    var currentTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
-
     LaunchedEffect(Unit) {
         viewModel.loadInstalledApps(context)
-        while (true) {
-            delay(500)
-            currentTime = System.currentTimeMillis()
+    }
+
+    val statsMap = remember {
+        val today = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0)
+        }.timeInMillis
+        usageStatsManager.queryAndAggregateUsageStats(today, System.currentTimeMillis())
+    }
+
+    val filteredApps by remember(searchQuery, viewModel.allInstalledApps, viewModel.whitelistedApps) {
+        derivedStateOf {
+            viewModel.allInstalledApps.filter {
+                !viewModel.whitelistedApps.contains(it.packageName) &&
+                        it.name.contains(searchQuery, ignoreCase = true)
+            }
         }
     }
 
-    val today = Calendar.getInstance().apply {
-        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0)
-    }.timeInMillis
-    val statsMap = usageStatsManager.queryAndAggregateUsageStats(today, System.currentTimeMillis())
-
-    val filteredApps = viewModel.allInstalledApps.filter {
-        !viewModel.whitelistedApps.contains(it.packageName) &&
-                it.name.contains(searchQuery, ignoreCase = true)
-    }
-
-    val activeApps = filteredApps.filter { (viewModel.unlockedAppsTime[it.packageName] ?: 0L) > currentTime }
-    val otherApps = filteredApps.filter { (viewModel.unlockedAppsTime[it.packageName] ?: 0L) <= currentTime }
+    val now = System.currentTimeMillis()
+    val activeApps = filteredApps.filter { (viewModel.unlockedAppsTime[it.packageName] ?: 0L) > now }
+    val otherApps = filteredApps.filter { (viewModel.unlockedAppsTime[it.packageName] ?: 0L) <= now }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("חנות Gems", fontSize = 32.sp, fontWeight = FontWeight.ExtraBold, color = emeraldColor)
+        Text(
+            text = if (isHebrew) "חנות Gems" else "Gems Store",
+            fontSize = 32.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = emeraldColor
+        )
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.Diamond, null, tint = emeraldColor, modifier = Modifier.size(20.dp))
             Spacer(modifier = Modifier.width(6.dp))
-            Text("היתרה שלך: ${viewModel.diamonds.value} Gems", color = emeraldColor, fontWeight = FontWeight.Bold)
+            Text(
+                text = if (isHebrew) "היתרה שלך: ${viewModel.diamonds.value} Gems" else "Your Balance: ${viewModel.diamonds.value} Gems",
+                color = emeraldColor,
+                fontWeight = FontWeight.Bold
+            )
         }
 
         Spacer(modifier = Modifier.height(20.dp))
@@ -80,7 +91,7 @@ fun StoreScreen(viewModel: GemViewModel) {
             value = searchQuery,
             onValueChange = { searchQuery = it },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("חפש אפליקציה...") },
+            placeholder = { Text(if (isHebrew) "חפש אפליקציה..." else "Search app...") },
             leadingIcon = { Icon(Icons.Default.Search, null, tint = emeraldColor) },
             shape = RoundedCornerShape(16.dp),
             singleLine = true
@@ -88,11 +99,22 @@ fun StoreScreen(viewModel: GemViewModel) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             if (activeApps.isNotEmpty()) {
-                item { Text("אפליקציות פועלות", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = emeraldColor) }
-                items(activeApps, key = { it.packageName }) { app ->
-                    AppStoreItem(app, viewModel, statsMap, pm, true, emeraldColor, currentTime) {
+                item {
+                    Text(
+                        text = if (isHebrew) "אפליקציות פועלות" else "Active Apps",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = emeraldColor
+                    )
+                }
+
+                items(activeApps, key = { it.packageName }) { app: GemViewModel.AppInfoData ->
+                    AppStoreItem(app, viewModel, statsMap, pm, true, emeraldColor) {
                         selectedAppForPurchase = it
                     }
                 }
@@ -100,9 +122,17 @@ fun StoreScreen(viewModel: GemViewModel) {
             }
 
             if (otherApps.isNotEmpty()) {
-                item { Text("כל האפליקציות", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) }
-                items(otherApps, key = { it.packageName }) { app ->
-                    AppStoreItem(app, viewModel, statsMap, pm, false, emeraldColor, currentTime) {
+                item {
+                    Text(
+                        text = if (isHebrew) "כל האפליקציות" else "All Apps",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                items(otherApps, key = { it.packageName }) { app: GemViewModel.AppInfoData ->
+                    AppStoreItem(app, viewModel, statsMap, pm, false, emeraldColor) {
                         selectedAppForPurchase = it
                     }
                 }
@@ -123,11 +153,21 @@ fun AppStoreItem(
     pm: android.content.pm.PackageManager,
     isActive: Boolean,
     emeraldColor: Color,
-    currentTime: Long,
     onPurchaseClick: (GemViewModel.AppInfoData) -> Unit
 ) {
-    val expiryTime = viewModel.unlockedAppsTime[app.packageName] ?: 0L
-    val remainingMillis = (expiryTime - currentTime).coerceAtLeast(0)
+    val isHebrew = viewModel.language.value == "iw"
+    var remainingMillis by remember { mutableLongStateOf(0L) }
+
+    if (isActive) {
+        LaunchedEffect(app.packageName) {
+            while (true) {
+                val expiry = viewModel.unlockedAppsTime[app.packageName] ?: 0L
+                remainingMillis = (expiry - System.currentTimeMillis()).coerceAtLeast(0)
+                if (remainingMillis <= 0) break
+                delay(1000)
+            }
+        }
+    }
 
     val appIcon = remember(app.packageName) {
         try {
@@ -144,7 +184,7 @@ fun AppStoreItem(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isActive) emeraldColor.copy(alpha = 0.12f) else Color.Transparent
+            containerColor = if (isActive) emeraldColor.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
         ),
         border = if (isActive) androidx.compose.foundation.BorderStroke(1.dp, emeraldColor) else null
     ) {
@@ -156,14 +196,25 @@ fun AppStoreItem(
                 if (isActive && remainingMillis > 0) {
                     val minutes = (remainingMillis / 1000) / 60
                     val seconds = (remainingMillis / 1000) % 60
-                    Text("נותר: ${String.format("%02d:%02d", minutes, seconds)}", color = emeraldColor, fontWeight = FontWeight.ExtraBold)
+                    val timeString = if (isHebrew) "%02d:%02d נותרו" else "%02d:%02d left"
+                    Text(String.format(timeString, minutes, seconds), color = emeraldColor, fontWeight = FontWeight.ExtraBold)
                 } else {
                     val timeUsedMin = (statsMap[app.packageName]?.totalTimeInForeground ?: 0L) / 60000
-                    Text("שימוש היום: $timeUsedMin דק'", color = Color.Gray)
+                    val usageText = if (isHebrew) "שימוש היום: $timeUsedMin דק'" else "Today's use: $timeUsedMin min"
+                    Text(usageText, color = Color.Gray, fontSize = 12.sp)
                 }
             }
-            Button(onClick = { onPurchaseClick(app) }, colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)) {
-                Text(if (isActive) "הוסף" else "קנה", color = Color.White)
+            Button(
+                onClick = { onPurchaseClick(app) },
+                colors = ButtonDefaults.buttonColors(containerColor = emeraldColor),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                modifier = Modifier.height(36.dp)
+            ) {
+                Text(
+                    text = if (isActive) (if (isHebrew) "עוד" else "More") else (if (isHebrew) "קנה" else "Buy"),
+                    color = Color.White,
+                    fontSize = 14.sp
+                )
             }
         }
     }
@@ -179,6 +230,7 @@ fun PurchaseDialog(
     darkEmerald: Color,
     onDismiss: () -> Unit
 ) {
+    val isHebrew = viewModel.language.value == "iw"
     val pm = context.packageManager
     val timeUsedMin = (statsMap[app.packageName]?.totalTimeInForeground ?: 0L) / 60000
     val usagePenalty = (timeUsedMin / 30).toInt() * 10
@@ -198,14 +250,14 @@ fun PurchaseDialog(
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            modifier = Modifier.fillMaxWidth().height(480.dp),
-            shape = RoundedCornerShape(28.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            modifier = Modifier.fillMaxWidth().wrapContentHeight(),
+            shape = RoundedCornerShape(32.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
         ) {
             Column(
-                modifier = Modifier.fillMaxSize().padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (showStatusMessage != null) {
                     Icon(
@@ -214,60 +266,100 @@ fun PurchaseDialog(
                         tint = if (isSuccess) emeraldColor else Color.Red,
                         modifier = Modifier.size(80.dp)
                     )
-                    Spacer(modifier = Modifier.height(20.dp))
-                    Text(showStatusMessage!!, textAlign = TextAlign.Center, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                    Spacer(modifier = Modifier.height(30.dp))
-                    Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)) {
-                        Text("סגור")
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        showStatusMessage!!,
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp,
+                        lineHeight = 28.sp
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(containerColor = emeraldColor),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (isHebrew) "הבנתי, תודה" else "Got it, thanks", fontWeight = FontWeight.Bold)
                     }
                 } else {
-                    appIcon?.let { Image(bitmap = it, contentDescription = null, modifier = Modifier.size(72.dp).clip(CircleShape)) }
+                    appIcon?.let {
+                        Image(bitmap = it, contentDescription = null, modifier = Modifier.size(64.dp).clip(CircleShape))
+                    }
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text(app.name, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                    Text("בחר חבילת זמן", color = Color.Gray)
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    val packages = listOf(
-                        Triple(5, 30, "5 דקות"),
-                        Triple(15, 70, "15 דקות"),
-                        Triple(30, 120, "חצי שעה"),
-                        Triple(60, 200, "שעה אחת")
+                    Text(app.name, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(
+                        text = if (isHebrew) "פתיחה לזמן מוגבל" else "Unlock for limited time",
+                        fontSize = 14.sp,
+                        color = Color.Gray
                     )
 
-                    packages.forEach { (mins, basePrice, label) ->
-                        val finalPrice = basePrice + usagePenalty
-                        Button(
-                            onClick = {
-                                if (viewModel.diamonds.value >= finalPrice) {
-                                    viewModel.buyTimeForApp(app.packageName, mins, finalPrice, context)
-                                    isSuccess = true
-                                    showStatusMessage = "הרכישה בוצעה!\nתהנה מ-$label"
-                                } else {
-                                    val missing = finalPrice - viewModel.diamonds.value
-                                    isSuccess = false
-                                    showStatusMessage = "אין לך מספיק Gems..\nחסר לך עוד $missing"
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                // כאן השינוי לאפור בהיר במצב כהה
-                                containerColor = if (viewModel.isDarkMode.value) Color(0xFF363636) else Color(0xFFF1F8E9),
-                                contentColor = Color.Black // טקסט שחור לקריאות על אפור
-                            ),
-                            shape = RoundedCornerShape(14.dp)
+                    if (usagePenalty > 0) {
+                        Surface(
+                            color = Color.Red.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.padding(top = 8.dp)
                         ) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(label, fontWeight = FontWeight.Bold)
-                                Row {
-                                    Text("$finalPrice", fontWeight = FontWeight.ExtraBold, color = emeraldColor)
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(Icons.Default.Diamond, null, tint = emeraldColor, modifier = Modifier.size(16.dp))
+                            Text(
+                                text = if (isHebrew) "אפליקציה בשימוש מוגבר: $usagePenalty Gems יותר" else "Heavy usage: $usagePenalty Gems extra",
+                                color = Color.Red,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    val packages = if (isHebrew) {
+                        listOf(Triple(5, 30, "5 דקות"), Triple(15, 70, "15 דקות"), Triple(30, 120, "30 דקות"), Triple(60, 200, "שעה אחת"))
+                    } else {
+                        listOf(Triple(5, 30, "5 Minutes"), Triple(15, 70, "15 Minutes"), Triple(30, 120, "30 Minutes"), Triple(60, 200, "1 Hour"))
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        packages.chunked(2).forEach { rowItems ->
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                rowItems.forEach { (mins, basePrice, label) ->
+                                    val finalPrice = basePrice + usagePenalty
+                                    Surface(
+                                        onClick = {
+                                            if (viewModel.diamonds.value >= finalPrice) {
+                                                viewModel.buyTimeForApp(app.packageName, mins, finalPrice, context)
+                                                isSuccess = true
+                                                showStatusMessage = if (isHebrew) "תהנה!\n$label של ${app.name} פתוחים עכשיו." else "Enjoy!\n$label of ${app.name} are now open."
+                                            } else {
+                                                isSuccess = false
+                                                val needed = finalPrice - viewModel.diamonds.value
+                                                showStatusMessage = if (isHebrew) "חסרים לך עוד $needed Gems..." else "You need $needed more Gems..."
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(16.dp),
+                                        color = if (viewModel.isDarkMode.value) Color(0xFF2C2C2C) else Color(0xFFF5F5F5),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, emeraldColor.copy(alpha = 0.3f))
+                                    ) {
+                                        Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text(label, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text("$finalPrice", fontWeight = FontWeight.ExtraBold, color = emeraldColor, fontSize = 18.sp)
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Icon(Icons.Default.Diamond, null, tint = emeraldColor, modifier = Modifier.size(14.dp))
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
-                    TextButton(onClick = onDismiss) { Text("ביטול", color = Color.Gray) }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+                    TextButton(onClick = onDismiss) {
+                        Text(if (isHebrew) "ביטול" else "Cancel", color = Color.Gray)
+                    }
                 }
             }
         }
