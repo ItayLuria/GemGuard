@@ -1,4 +1,3 @@
-// קובץ: MainActivity.kt
 package com.gemguard
 
 import android.app.AppOpsManager
@@ -12,15 +11,26 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Diamond
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.*
 import com.gemguard.pages.*
 import com.gemguard.ui.theme.GemGuardTheme
@@ -44,12 +54,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             val isSetupComplete = viewModel.isSetupCompleteState.value
             val context = LocalContext.current
             val isHebrew = viewModel.language.value == "iw"
+            val isDark = viewModel.isDarkMode.value
 
             var hasUsagePermission by remember { mutableStateOf(isAccessGranted()) }
             var hasOverlayPermission by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
 
-            // שימוש ב-Theme שמושפע מה-ViewModel
-            GemGuardTheme(darkTheme = viewModel.isDarkMode.value) {
+            GemGuardTheme(darkTheme = isDark) {
                 val layoutDirection = if (isHebrew) LayoutDirection.Rtl else LayoutDirection.Ltr
 
                 CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
@@ -83,47 +93,38 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
                     Surface(
                         modifier = Modifier.fillMaxSize(),
-                        color = MaterialTheme.colorScheme.background // רקע דינמי
+                        color = MaterialTheme.colorScheme.background
                     ) {
                         Scaffold(
+                            topBar = {
+                                if (isSetupComplete) {
+                                    GlobalTopBar(viewModel, navController)
+                                }
+                            },
                             bottomBar = {
                                 if (isSetupComplete) {
-                                    NavigationBar {
-                                        val screens = listOf(Screen.Home, Screen.Tasks, Screen.Store, Screen.Settings)
-                                        screens.forEach { screen ->
-                                            NavigationBarItem(
-                                                icon = { Icon(screen.icon, null) },
-                                                label = { Text(if (isHebrew) screen.title else screen.titleEn) },
-                                                selected = navController.currentBackStackEntryAsState().value?.destination?.route == screen.route,
-                                                onClick = {
-                                                    navController.navigate(screen.route) {
-                                                        popUpTo(navController.graph.startDestinationId)
-                                                        launchSingleTop = true
-                                                    }
-                                                }
-                                            )
-                                        }
-                                    }
+                                    MyBottomNavigationBar(navController, viewModel, isHebrew)
                                 }
                             }
                         ) { padding ->
-                            NavHost(
-                                navController = navController,
-                                startDestination = if (isSetupComplete) Screen.Home.route else "setup",
-                                modifier = Modifier.padding(padding)
-                            ) {
-                                composable("setup") {
-                                    SetupScreen(viewModel) {
-                                        viewModel.saveSettings(context)
-                                        navController.navigate(Screen.Home.route) {
-                                            popUpTo("setup") { inclusive = true }
+                            Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+                                NavHost(
+                                    navController = navController,
+                                    startDestination = if (isSetupComplete) Screen.Home.route else "setup"
+                                ) {
+                                    composable("setup") {
+                                        SetupScreen(viewModel) {
+                                            viewModel.saveSettings(context)
+                                            navController.navigate(Screen.Home.route) {
+                                                popUpTo("setup") { inclusive = true }
+                                            }
                                         }
                                     }
+                                    composable(Screen.Home.route) { Home(viewModel) }
+                                    composable(Screen.Store.route) { StoreScreen(viewModel) }
+                                    composable(Screen.Tasks.route) { TasksScreen(viewModel) }
+                                    composable(Screen.Settings.route) { SettingsScreen(viewModel = viewModel) }
                                 }
-                                composable(Screen.Home.route) { Home(viewModel) }
-                                composable(Screen.Store.route) { StoreScreen(viewModel) }
-                                composable(Screen.Tasks.route) { TasksScreen(viewModel) }
-                                composable(Screen.Settings.route) { SettingsScreen(viewModel = viewModel) }
                             }
                         }
                     }
@@ -168,14 +169,137 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         stepSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI) }
     }
 
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        blockedAppPackage = intent.getStringExtra("blocked_app")
-    }
-
     override fun onSensorChanged(e: SensorEvent?) {
         e?.let { viewModel.updateStepsWithContext(it.values[0].toInt(), this) }
     }
 
     override fun onAccuracyChanged(p0: Sensor?, p1: Int) {}
+}
+
+@Composable
+fun GlobalTopBar(viewModel: GemViewModel, navController: NavHostController) {
+    val isDark = viewModel.isDarkMode.value
+    val emeraldColor = Color(0xFF2ECC71)
+    val barColor = if (isDark) Color(0xFF1A1A1A) else Color(0xFFFDFDFD)
+    val borderColor = if (isDark) Color.White.copy(alpha = 0.1f) else Color.Black.copy(alpha = 0.05f)
+
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(barColor)
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween, // מחזיר את הלוגו לשמאל/ימין ואת הקפסולה לצד השני
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // לוגו GemGuard בצד
+            Text(
+                text = "GemGuard",
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 19.sp,
+                color = if (isDark) Color.White else Color.Black
+            )
+
+            // הקפסולה המאוחדת בצד השני
+            Surface(
+                color = if (isDark) Color(0xFF2C2C2C) else Color(0xFFF0F0F0),
+                shape = RoundedCornerShape(8.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, borderColor)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = { navController.navigate(Screen.Tasks.route) },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Add",
+                            tint = emeraldColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(18.dp)
+                            .background(borderColor)
+                    )
+
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${viewModel.diamonds.value}",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isDark) Color.White else Color.Black
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Default.Diamond,
+                            contentDescription = null,
+                            tint = emeraldColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+        }
+        HorizontalDivider(color = borderColor, thickness = 1.dp)
+    }
+}
+@Composable
+fun MyBottomNavigationBar(navController: NavHostController, viewModel: GemViewModel, isHebrew: Boolean) {
+    val navBackgroundColor = if (viewModel.isDarkMode.value) Color(0xFF1F1F1F) else Color.White
+    val contentColor = if (viewModel.isDarkMode.value) Color.White else Color.Black
+    val selectedIndicatorColor = if (viewModel.isDarkMode.value) Color(0xFF333333) else Color(0xFFF0F0F0)
+
+    NavigationBar(containerColor = navBackgroundColor, tonalElevation = 8.dp) {
+        val navBackStackEntry by navController.currentBackStackEntryAsState()
+        val currentRoute = navBackStackEntry?.destination?.route
+        val screens = listOf(Screen.Home, Screen.Tasks, Screen.Store, Screen.Settings)
+
+        screens.forEach { screen ->
+            val isSelected = currentRoute == screen.route
+
+            NavigationBarItem(
+                selected = isSelected,
+                onClick = {
+                    // תיקון: אם אנחנו כבר במסך הזה, אל תנווט שוב (מונע תקיעות)
+                    if (currentRoute != screen.route) {
+                        navController.navigate(screen.route) {
+                            popUpTo(navController.graph.startDestinationId) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                },
+                icon = {
+                    Icon(
+                        imageVector = screen.icon,
+                        contentDescription = null,
+                        tint = if (isSelected) contentColor else contentColor.copy(alpha = 0.5f)
+                    )
+                },
+                label = {
+                    Text(
+                        text = if (isHebrew) screen.title else screen.titleEn,
+                        color = if (isSelected) contentColor else contentColor.copy(alpha = 0.5f),
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        fontSize = 12.sp
+                    )
+                },
+                colors = NavigationBarItemDefaults.colors(
+                    indicatorColor = selectedIndicatorColor,
+                    selectedIconColor = contentColor,
+                    unselectedIconColor = contentColor.copy(alpha = 0.5f),
+                    selectedTextColor = contentColor,
+                    unselectedTextColor = contentColor.copy(alpha = 0.5f)
+                )
+            )
+        }
+    }
 }
