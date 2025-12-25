@@ -278,9 +278,26 @@ class GemViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun loadWhitelist() {
         val savedWhitelist = prefs.getString("whitelist", "") ?: ""
+        val myPackageName = getApplication<Application>().packageName // מזהה את GemGuard באופן דינמי
+
         _whitelistedApps.clear()
-        if (savedWhitelist.isNotEmpty()) _whitelistedApps.addAll(savedWhitelist.split(","))
-        if (!_whitelistedApps.contains("com.android.settings")) _whitelistedApps.add("com.android.settings")
+
+        // 1. טעינת האפליקציות שהמשתמש בחר
+        if (savedWhitelist.isNotEmpty()) {
+            _whitelistedApps.addAll(savedWhitelist.split(","))
+        }
+
+        // 2. הוספת הגדרות המערכת (חובה כדי לא להיתקע)
+        if (!_whitelistedApps.contains("com.android.settings")) {
+            _whitelistedApps.add("com.android.settings")
+        }
+
+        // 3. הוספת GemGuard עצמה ל-Whitelist באופן אוטומטי
+        if (!_whitelistedApps.contains(myPackageName)) {
+            _whitelistedApps.add(myPackageName)
+            // שמירה מידית כדי שה-Service יכיר בזה
+            prefs.edit().putString("whitelist", _whitelistedApps.joinToString(",")).apply()
+        }
     }
 
     private fun loadUnlockedApps() {

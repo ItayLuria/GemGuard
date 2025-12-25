@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.Drawable
+import androidx.compose.animation.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -72,35 +73,38 @@ fun StoreScreen(viewModel: GemViewModel) {
         }
     }
 
+    // --- התיקון המרכזי כאן: סינון אפליקציות שב-Whitelist ---
     val filteredApps by remember(searchQuery, viewModel.allInstalledApps, viewModel.whitelistedApps) {
         derivedStateOf {
-            viewModel.allInstalledApps.filter {
-                !viewModel.whitelistedApps.contains(it.packageName) &&
-                        it.name.contains(searchQuery, ignoreCase = true)
+            viewModel.allInstalledApps.filter { app ->
+                // תנאי 1: האפליקציה לא ברשימת הלבנה (Whitelist)
+                val isNotWhitelisted = !viewModel.whitelistedApps.contains(app.packageName)
+                // תנאי 2: האפליקציה תואמת לשאילתת החיפוש
+                val matchesSearch = app.name.contains(searchQuery, ignoreCase = true)
+
+                isNotWhitelisted && matchesSearch
             }
         }
     }
 
     val unlockedTimes = viewModel.unlockedAppsTime.toMap()
 
-    // --- התיקון כאן: הוספת מיון לאפליקציות פעילות ---
+    // אפליקציות שהזמן שלהן פתוח כרגע
     val activeApps by remember(filteredApps, unlockedTimes, statsMap.value) {
         derivedStateOf {
             val currentNow = System.currentTimeMillis()
             filteredApps
                 .filter { (unlockedTimes[it.packageName] ?: 0L) > currentNow }
-                // מיון לפי זמן שימוש (מהגבוה לנמוך)
                 .sortedByDescending { statsMap.value[it.packageName]?.totalTimeInForeground ?: 0L }
         }
     }
 
-    // --- התיקון כאן: הוספת מיון לשאר האפליקציות ---
+    // שאר האפליקציות (החסומות)
     val otherApps by remember(filteredApps, unlockedTimes, statsMap.value) {
         derivedStateOf {
             val currentNow = System.currentTimeMillis()
             filteredApps
                 .filter { (unlockedTimes[it.packageName] ?: 0L) <= currentNow }
-                // מיון לפי זמן שימוש (מהגבוה לנמוך)
                 .sortedByDescending { statsMap.value[it.packageName]?.totalTimeInForeground ?: 0L }
         }
     }
@@ -112,7 +116,7 @@ fun StoreScreen(viewModel: GemViewModel) {
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        // כותרת
+        // כותרת היתרה
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -138,6 +142,7 @@ fun StoreScreen(viewModel: GemViewModel) {
 
         Spacer(modifier = Modifier.height(20.dp))
 
+        // שדה חיפוש
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
@@ -189,7 +194,7 @@ fun StoreScreen(viewModel: GemViewModel) {
                     }
                 }
 
-                if (!showAllApps && otherApps.size > 10) {
+                if (!showAllApps && otherApps.size > 12) {
                     item {
                         Button(
                             onClick = { showAllApps = true },
@@ -228,6 +233,8 @@ fun StoreScreen(viewModel: GemViewModel) {
         PurchaseDialog(app, viewModel, statsMap.value, context, emeraldColor, darkEmerald) { selectedAppForPurchase = null }
     }
 }
+
+// ... שאר הפונקציות (AppStoreItem, CachedAppIcon, PurchaseDialog) נשארות ללא שינוי ...
 
 @Composable
 fun AppStoreItem(
