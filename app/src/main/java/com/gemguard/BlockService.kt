@@ -38,7 +38,6 @@ class BlockService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val notification = NotificationCompat.Builder(this, "block_service")
             .setContentTitle("GemGuard פעיל")
-            .setContentText("שומר עליך ברקע")
             .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MIN) // פחות מציק למשתמש
