@@ -122,7 +122,7 @@ fun TasksScreen(viewModel: GemViewModel) {
                             }
                         } else {
                             Button(
-                                onClick = { viewModel.addDiamonds(task.reward, task.id, context) },
+                                onClick = { viewModel.addDiamonds(task.reward, task.id) },
                                 enabled = isCompleted,
                                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
                                 modifier = Modifier.height(34.dp),

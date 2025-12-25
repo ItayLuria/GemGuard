@@ -4,18 +4,20 @@ import android.app.*
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.*
+import android.content.pm.PackageManager
 import android.os.Build
-import android.os.IBinder
 import android.os.Handler
+import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
-import android.content.pm.PackageManager
 import kotlinx.coroutines.*
-
+import com.gemguard.MainActivity
 class BlockService : Service() {
     private val notifiedApps = mutableSetOf<String>()
     private val serviceJob = Job()
     private val serviceScope = CoroutineScope(Dispatchers.Default + serviceJob)
+
+    private var currentForegroundApp: String? = null
 
     private val systemSafePackages = listOf(
         "com.android.settings",
@@ -23,23 +25,33 @@ class BlockService : Service() {
         "com.android.packageinstaller",
         "com.google.android.settings.intelligence",
         "com.android.systemui",
-        "android"
+        "android",
+        "com.gemguard"
     )
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    override fun onCreate() {
+        super.onCreate()
+        // יצירת הערוץ כבר ב-onCreate כדי למנוע קריסות בהפעלה מהירה
         createNotificationChannel()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val notification = NotificationCompat.Builder(this, "block_service")
             .setContentTitle("GemGuard פעיל")
+            .setContentText("שומר עליך ברקע")
             .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
             .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_MIN) // פחות מציק למשתמש
             .build()
+
+        // שימוש ב-Foreground Service כדי שהמערכת לא תהרוג את החסימה
         startForeground(1, notification)
 
+        // התחלת לולאת הבדיקה
         serviceScope.launch {
             while (isActive) {
                 checkTopApp()
-                // דגימה מהירה מאוד (250ms) כדי לסגור כל ניסיון פתיחה
-                delay(250)
+                delay(250) // איזון בין מהירות תגובה לחיסכון בסוללה
             }
         }
 
@@ -48,31 +60,57 @@ class BlockService : Service() {
 
     private fun checkTopApp() {
         val prefs = getSharedPreferences("GemGuardPrefs", Context.MODE_PRIVATE)
+
+        // בדיקה האם המשתמש כיבה את ההגנה ידנית
+        val isServiceEnabled = prefs.getBoolean("service_enabled", true)
+        if (!isServiceEnabled) return
+
         if (!prefs.getBoolean("setup_complete", false)) return
 
         val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        val time = System.currentTimeMillis()
+        val endTime = System.currentTimeMillis()
+        val startTime = endTime - 1000 // צמצום הטווח לחיפוש מהיר יותר
 
-        // שיטה משולבת: בודקים את האפליקציה האחרונה שדווחה כפעילה ב-5 השניות האחרונות
-        val stats = usageStatsManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, time - 5000, time)
-        val topApp = stats?.maxByOrNull { it.lastTimeUsed }?.packageName ?: return
+        val events = usageStatsManager.queryEvents(startTime, endTime)
+        val event = UsageEvents.Event()
 
-        if (shouldBlock(topApp, prefs)) {
-            lockApp(topApp)
+        var lastApp: String? = null
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            if (event.eventType == UsageEvents.Event.MOVE_TO_FOREGROUND) {
+                lastApp = event.packageName
+            }
+        }
+
+        if (lastApp != null) {
+            currentForegroundApp = lastApp
+        }
+
+        val appToCheck = currentForegroundApp ?: return
+
+        if (shouldBlock(appToCheck, prefs)) {
+            lockApp(appToCheck)
         }
     }
 
     private fun shouldBlock(topApp: String, prefs: SharedPreferences): Boolean {
+        // רשימת החרגות: האפליקציה עצמה, הלאנצ'ר ומערכת
         if (topApp == packageName || isLauncherApp(topApp) || systemSafePackages.contains(topApp)) {
             return false
         }
 
+        // בדיקה ברשימת הלבנה (Whitelist)
         val whitelist = prefs.getString("whitelist", "")?.split(",") ?: listOf()
         if (whitelist.contains(topApp)) return false
 
+        // בדיקה האם האפליקציה נרכשה/פתוחה כרגע
         val expiryTime = prefs.getLong("unlock_$topApp", 0L)
-        val remaining = expiryTime - System.currentTimeMillis()
+        if (expiryTime == 0L) return true // חסום אם מעולם לא נפתח
 
+        val currentTime = System.currentTimeMillis()
+        val remaining = expiryTime - currentTime
+
+        // התראת דקה לסיום
         if (remaining in 1..60000 && !notifiedApps.contains(topApp)) {
             sendWarning(topApp)
             notifiedApps.add(topApp)
@@ -82,27 +120,26 @@ class BlockService : Service() {
     }
 
     private fun lockApp(packageName: String) {
+        // איפוס התראות לאפליקציה שנחסמה עכשיו
         notifiedApps.remove(packageName)
 
-        // 1. קוד ה"פטיש": שליחת המשתמש למסך הבית.
-        // זה מבטל Split Screen באופן מיידי ברוב הגרסאות של אנדרואיד.
+        // זריקה למסך הבית (כדי לסגור את האפליקציה החסומה)
         val homeIntent = Intent(Intent.ACTION_MAIN).apply {
             addCategory(Intent.CATEGORY_HOME)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         startActivity(homeIntent)
 
-        // 2. פתיחת GemGuard עם דיאלוג החסימה בהשהייה קצרה מאוד
+        // פתיחת דיאלוג החסימה בתוך האפליקציה שלנו
         Handler(Looper.getMainLooper()).postDelayed({
             val lockIntent = Intent(this, MainActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-                addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 putExtra("blocked_app", packageName)
             }
             startActivity(lockIntent)
-        }, 150) // השהייה של 150ms כדי לוודא שמסך הבית תפס את הפוקוס
+        }, 150)
     }
 
     private fun isLauncherApp(packageName: String): Boolean {
@@ -124,19 +161,25 @@ class BlockService : Service() {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .build()
-        (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(2, n)
+        val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(2, n)
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel("block_service", "GemGuard Service", NotificationManager.IMPORTANCE_LOW)
-            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+            val channel = NotificationChannel(
+                "block_service",
+                "GemGuard Protection Service",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
         }
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         serviceJob.cancel()
+        super.onDestroy()
     }
 
     override fun onBind(p0: Intent?): IBinder? = null

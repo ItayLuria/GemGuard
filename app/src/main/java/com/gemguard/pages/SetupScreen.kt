@@ -1,11 +1,14 @@
 package com.gemguard.pages
 
 import android.app.AppOpsManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.text.TextUtils
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -28,10 +31,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.gemguard.GemViewModel
 import com.gemguard.MainActivity
+import com.gemguard.RecentsBlockerService
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,11 +44,22 @@ fun SetupScreen(viewModel: GemViewModel, onComplete: () -> Unit) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val isHebrew = viewModel.language.value == "iw"
-    val emeraldColor = Color(0xFF2ECC71)
+    val emeraldColor = Color(0xFF2ECC71) // הצבע הירוק של האפליקציה
     var pin by remember { mutableStateOf("") }
     val currentStep by viewModel.setupStep
 
-    // פונקציות עזר לבדיקת הרשאות
+    // --- פונקציות עזר לבדיקת הרשאות ---
+
+    fun hasStepPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.ACTIVITY_RECOGNITION
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+    }
+
     fun hasUsagePermission(): Boolean {
         val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
         val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -59,20 +75,42 @@ fun SetupScreen(viewModel: GemViewModel, onComplete: () -> Unit) {
 
     fun hasNotificationPermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            androidx.core.content.ContextCompat.checkSelfPermission(
+            ContextCompat.checkSelfPermission(
                 context, android.Manifest.permission.POST_NOTIFICATIONS
-            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) == PackageManager.PERMISSION_GRANTED
         } else true
     }
 
-    // ניהול מעבר אוטומטי בין שלבים כשחוזרים מההגדרות של המכשיר
+    fun isAccessibilityEnabled(): Boolean {
+        val expectedComponentName = ComponentName(context, RecentsBlockerService::class.java)
+        val enabledServicesSetting = Settings.Secure.getString(
+            context.contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+
+        val colonSplitter = TextUtils.SimpleStringSplitter(':')
+        colonSplitter.setString(enabledServicesSetting)
+
+        while (colonSplitter.hasNext()) {
+            val componentNameString = colonSplitter.next()
+            val enabledComponent = ComponentName.unflattenFromString(componentNameString)
+            if (enabledComponent != null && enabledComponent == expectedComponentName) {
+                return true
+            }
+        }
+        return false
+    }
+
+    // --- ניהול מעבר אוטומטי בין שלבים ---
     DisposableEffect(lifecycleOwner, currentStep) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 when (currentStep) {
+                    2 -> if (hasStepPermission()) viewModel.setupStep.intValue = 3
                     3 -> if (hasNotificationPermission()) viewModel.setupStep.intValue = 4
                     4 -> if (hasUsagePermission()) viewModel.setupStep.intValue = 5
-                    5 -> if (hasOverlayPermission()) {
+                    5 -> if (hasOverlayPermission()) viewModel.setupStep.intValue = 6
+                    6 -> if (isAccessibilityEnabled()) {
                         viewModel.saveSettings(context)
                         onComplete()
                     }
@@ -84,15 +122,17 @@ fun SetupScreen(viewModel: GemViewModel, onComplete: () -> Unit) {
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(30.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(30.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // מחוון צעדים (0 עד 5 = 6 נקודות)
+        // מחוון צעדים
         Row(
             modifier = Modifier.padding(top = 20.dp, bottom = 40.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            repeat(6) { index ->
+            repeat(7) { index ->
                 Box(
                     modifier = Modifier
                         .size(if (currentStep == index) 12.dp else 8.dp)
@@ -161,7 +201,7 @@ fun SetupScreen(viewModel: GemViewModel, onComplete: () -> Unit) {
                         Text(if(isHebrew) "מעקב צעדים" else "Step Tracking", fontSize = 24.sp, fontWeight = FontWeight.Bold)
                         Text(if(isHebrew) "כדי שנוכל להמיר צעדים ליהלומים." else "To convert steps to gems.", textAlign = TextAlign.Center)
                         Button(
-                            onClick = { (context as? MainActivity)?.requestStepPermission { viewModel.setupStep.intValue = 3 } },
+                            onClick = { (context as? MainActivity)?.requestStepPermission {} },
                             modifier = Modifier.padding(top = 20.dp).fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)
                         ) { Text(if(isHebrew) "אשר הרשאה" else "Grant Permission") }
@@ -190,7 +230,8 @@ fun SetupScreen(viewModel: GemViewModel, onComplete: () -> Unit) {
                     }
 
                     5 -> { // תצוגה מעל אפליקציות
-                        Icon(Icons.Default.Layers, null, modifier = Modifier.size(100.dp), tint = Color.Red)
+                        // תוקן: שונה מירוק (emeraldColor) במקום אדום (Color.Red)
+                        Icon(Icons.Default.Layers, null, modifier = Modifier.size(100.dp), tint = emeraldColor)
                         Text(if(isHebrew) "תצוגה מעל אפליקציות" else "Display Over Apps", fontSize = 24.sp, fontWeight = FontWeight.Bold)
                         Text(if(isHebrew) "אשר תצוגה מעל כדי להציג את מסך החסימה." else "Allow overlay to show the block screen.", textAlign = TextAlign.Center)
                         Button(
@@ -201,6 +242,69 @@ fun SetupScreen(viewModel: GemViewModel, onComplete: () -> Unit) {
                             modifier = Modifier.padding(top = 20.dp).fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)
                         ) { Text(if(isHebrew) "אשר תצוגה מעל" else "Allow Overlay") }
+                    }
+
+                    6 -> { // שירות נגישות
+                        Icon(Icons.Default.AccessibilityNew, null, modifier = Modifier.size(100.dp), tint = emeraldColor)
+                        Text(if(isHebrew) "חסימה מתקדמת" else "Advanced Blocking", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Text(
+                            if(isHebrew) "כדי למנוע עקיפה, יש להפעיל את GemGuard בתפריט הנגישות."
+                            else "To prevent bypassing, enable GemGuard in Accessibility settings.",
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 10.dp)
+                        )
+
+                        Spacer(modifier = Modifier.height(15.dp))
+
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if(isHebrew) "הוראות הפעלה:" else "Instructions:",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                Text(
+                                    text = if(isHebrew)
+                                        "1. לחץ על הכפתור למטה\n\n2. חפש 'יישומים מותקנים'\n(Installed Apps)\n\n3. בחר ב-GemGuard והפעל"
+                                    else
+                                        "1. Tap the button below\n\n2. Find 'Installed Apps'\n\n3. Select GemGuard and turn ON",
+                                    fontSize = 14.sp,
+                                    lineHeight = 22.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+
+                        Button(
+                            onClick = {
+                                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                context.startActivity(intent)
+                            },
+                            modifier = Modifier.padding(top = 20.dp).fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)
+                        ) { Text(if(isHebrew) "פתח הגדרות נגישות" else "Open Accessibility") }
                     }
                 }
             }

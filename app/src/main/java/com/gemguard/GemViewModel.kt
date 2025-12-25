@@ -1,14 +1,16 @@
 package com.gemguard
 
+import android.app.Application
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.runtime.*
 import androidx.core.os.LocaleListCompat
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -16,7 +18,8 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 
-// מודל המשימה עם תמיכה בשתי שפות ופונקציית העזר שחוסכת שגיאות ב-Home.kt
+// --- Data Classes ---
+
 data class Task(
     val id: Int,
     val nameHe: String,
@@ -24,11 +27,18 @@ data class Task(
     val requiredSteps: Int,
     val reward: Int
 ) {
-    // הפונקציה הזו מוודאת ש-Home.kt יזהה את הקריאה .isCompleted()
     fun isCompleted(claimedIds: List<Int>) = claimedIds.contains(id)
 }
 
-class GemViewModel : ViewModel() {
+// --- ViewModel ---
+
+class GemViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val prefs: SharedPreferences by lazy {
+        getApplication<Application>().getSharedPreferences("GemGuardPrefs", Context.MODE_PRIVATE)
+    }
+
+    // --- State Variables ---
     private val _diamonds = mutableStateOf(0)
     val diamonds: State<Int> = _diamonds
 
@@ -53,19 +63,34 @@ class GemViewModel : ViewModel() {
     var language = mutableStateOf("iw")
     var isSetupCompleteState = mutableStateOf(false)
 
+    private var cachedInitialSteps = -1
+    private var cachedLastDate = ""
+
     data class AppInfoData(val name: String, val packageName: String, val usageTime: Long = 0)
 
-    fun initData(context: Context) {
-        val prefs = context.getSharedPreferences("GemGuardPrefs", Context.MODE_PRIVATE)
+    // --- Core Logic ---
+
+    fun initData() {
         val todayDate = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())
         val lastSavedDate = prefs.getString("last_task_date", "")
 
+        // תיקון באג 1090: אם לא הושלם Setup מעולם, מאפסים את היהלומים ל-0
+        val isFirstTimeEver = !prefs.contains("setup_complete")
+        if (isFirstTimeEver) {
+            prefs.edit().putInt("diamonds", 0).apply()
+        }
+
+        // טעינת נתונים
         _diamonds.value = prefs.getInt("diamonds", 0)
         appPin.value = prefs.getString("app_pin", "") ?: ""
         isDarkMode.value = prefs.getBoolean("dark_mode", false)
         language.value = prefs.getString("language", "iw") ?: "iw"
         isSetupCompleteState.value = prefs.getBoolean("setup_complete", false)
 
+        cachedInitialSteps = prefs.getInt("initial_steps", -1)
+        cachedLastDate = prefs.getString("last_date", "") ?: ""
+
+        // איפוס יומי למשימות
         if (todayDate != lastSavedDate) {
             val lastClaimed = prefs.getString("claimed_tasks", "") ?: ""
             prefs.edit().putString("yesterday_claimed", lastClaimed).apply()
@@ -82,13 +107,13 @@ class GemViewModel : ViewModel() {
             }
         }
 
-        generateSmartTasks(context)
-        loadWhitelist(prefs)
-        loadUnlockedApps(prefs)
+        generateSmartTasks()
+        loadUnlockedApps()
+        loadWhitelist()
+        loadInstalledApps()
     }
 
-    private fun generateSmartTasks(context: Context) {
-        val prefs = context.getSharedPreferences("GemGuardPrefs", Context.MODE_PRIVATE)
+    private fun generateSmartTasks() {
         val calendar = Calendar.getInstance()
         val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
 
@@ -112,8 +137,9 @@ class GemViewModel : ViewModel() {
             listOf("Out of Bed", "Small Trip", "Almost There", "Massive Walk", "Day Conqueror")
         )
 
-        val selectedHeNames = nameHePool[(dayOfWeek - 1) % nameHePool.size]
-        val selectedEnNames = nameEnPool[(dayOfWeek - 1) % nameEnPool.size]
+        val safeIndex = (dayOfWeek - 1) % nameHePool.size
+        val selectedHeNames = nameHePool[safeIndex]
+        val selectedEnNames = nameEnPool[safeIndex]
 
         val baseSteps = listOf(1000, 2500, 5000, 7500, 10000)
         val baseRewards = listOf(20, 60, 150, 250, 500)
@@ -126,17 +152,20 @@ class GemViewModel : ViewModel() {
 
         baseSteps.forEachIndexed { index, steps ->
             val taskId = index + 1
-            val taskNameHe = selectedHeNames[index]
-            val taskNameEn = selectedEnNames[index]
+            val taskNameHe = selectedHeNames.getOrElse(index) { "משימה $taskId" }
+            val taskNameEn = selectedEnNames.getOrElse(index) { "Task $taskId" }
             val wasCompletedYesterday = yesterdayIds.contains(taskId)
 
             var modifier = prefs.getFloat("task_modifier_$taskId", 1.0f)
-
             if (wasCompletedYesterday) modifier *= 0.95f else modifier *= 1.05f
             modifier = modifier.coerceIn(0.5f, 2.0f)
             editor.putFloat("task_modifier_$taskId", modifier)
 
-            val finalReward = (baseRewards[index] * modifier).toInt().coerceAtLeast(5)
+            // --- התיקון כאן: חישוב ועיגול לכפולות של 10 ---
+            val calculatedReward = (baseRewards[index] * modifier).toInt()
+            val roundedReward = (calculatedReward / 10) * 10
+            val finalReward = roundedReward.coerceAtLeast(10) // מינימום 10 יהלומים
+
             _dailyTasks.add(Task(taskId, taskNameHe, taskNameEn, steps, finalReward))
         }
         editor.apply()
@@ -146,13 +175,13 @@ class GemViewModel : ViewModel() {
         language.value = langCode
         val appLocale: LocaleListCompat = LocaleListCompat.forLanguageTags(langCode)
         AppCompatDelegate.setApplicationLocales(appLocale)
+        prefs.edit().putString("language", langCode).apply()
     }
 
-    fun addDiamonds(amount: Int, taskId: Int, context: Context) {
+    fun addDiamonds(amount: Int, taskId: Int) {
         if (!_claimedTaskIds.contains(taskId)) {
             _diamonds.value += amount
             _claimedTaskIds.add(taskId)
-            val prefs = context.getSharedPreferences("GemGuardPrefs", Context.MODE_PRIVATE)
             prefs.edit().apply {
                 putInt("diamonds", _diamonds.value)
                 putString("claimed_tasks", _claimedTaskIds.joinToString(","))
@@ -169,12 +198,7 @@ class GemViewModel : ViewModel() {
             val newExpiry = (if (currentExpiry > currentTime) currentExpiry else currentTime) + (minutes.toLong() * 60 * 1000)
 
             unlockedAppsTime[packageName] = newExpiry
-
-            val prefs = context.getSharedPreferences("GemGuardPrefs", Context.MODE_PRIVATE)
-            prefs.edit()
-                .putLong("unlock_$packageName", newExpiry)
-                .putInt("diamonds", _diamonds.value)
-                .apply()
+            prefs.edit().putLong("unlock_$packageName", newExpiry).putInt("diamonds", _diamonds.value).apply()
 
             val appData = allInstalledApps.find { it.packageName == packageName }
             val intent = Intent(context, TimerService::class.java).apply {
@@ -182,36 +206,37 @@ class GemViewModel : ViewModel() {
                 putExtra("expiry_time", newExpiry)
                 putExtra("app_name", appData?.name ?: "App")
             }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
+            else context.startService(intent)
             return true
         }
         return false
     }
 
-    private fun loadWhitelist(prefs: android.content.SharedPreferences) {
-        val savedWhitelist = prefs.getString("whitelist", "") ?: ""
-        _whitelistedApps.clear()
-        if (savedWhitelist.isNotEmpty()) _whitelistedApps.addAll(savedWhitelist.split(","))
-        if (!_whitelistedApps.contains("com.android.settings")) _whitelistedApps.add("com.android.settings")
-    }
+    fun loadInstalledApps() {
+        if (allInstalledApps.isNotEmpty()) return
+        val context = getApplication<Application>()
+        viewModelScope.launch(Dispatchers.IO) {
+            val pm = context.packageManager
+            val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+            val calendar = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0)
+            }
+            val usageStats = usageStatsManager.queryAndAggregateUsageStats(calendar.timeInMillis, System.currentTimeMillis())
+            val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+            val tempList = apps.filter { pm.getLaunchIntentForPackage(it.packageName) != null }
+                .map { AppInfoData(it.loadLabel(pm).toString(), it.packageName, usageStats[it.packageName]?.totalTimeInForeground ?: 0L) }
+                .filter { !it.packageName.startsWith("com.android.systemui") && it.packageName != "android" }
+                .sortedByDescending { it.usageTime }
 
-    private fun loadUnlockedApps(prefs: android.content.SharedPreferences) {
-        val allPrefs = prefs.all
-        unlockedAppsTime.clear()
-        for ((key, value) in allPrefs) {
-            if (key.startsWith("unlock_") && value is Long && value > System.currentTimeMillis()) {
-                unlockedAppsTime[key.replace("unlock_", "")] = value
+            withContext(Dispatchers.Main) {
+                allInstalledApps.clear()
+                allInstalledApps.addAll(tempList)
             }
         }
     }
 
     fun saveSettings(context: Context) {
-        val prefs = context.getSharedPreferences("GemGuardPrefs", Context.MODE_PRIVATE)
         prefs.edit().apply {
             putString("app_pin", appPin.value)
             putBoolean("dark_mode", isDarkMode.value)
@@ -223,56 +248,48 @@ class GemViewModel : ViewModel() {
         isSetupCompleteState.value = true
     }
 
-    fun toggleDarkMode() { isDarkMode.value = !isDarkMode.value }
-
-    fun loadInstalledApps(context: Context) {
-        if (allInstalledApps.isNotEmpty()) return
-        viewModelScope.launch(Dispatchers.IO) {
-            val pm = context.packageManager
-            val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-            val calendar = Calendar.getInstance().apply {
-                set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0)
-            }
-            val startTime = calendar.timeInMillis
-            val endTime = System.currentTimeMillis()
-
-            val usageStats = usageStatsManager.queryAndAggregateUsageStats(startTime, endTime)
-            val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-            val tempList = mutableListOf<AppInfoData>()
-
-            for (app in apps) {
-                if (pm.getLaunchIntentForPackage(app.packageName) != null) {
-                    val label = app.loadLabel(pm).toString()
-                    val totalTime = usageStats[app.packageName]?.totalTimeInForeground ?: 0L
-                    if (!app.packageName.startsWith("com.android.systemui") && app.packageName != "android") {
-                        tempList.add(AppInfoData(label, app.packageName, totalTime))
-                    }
-                }
-            }
-            tempList.sortByDescending { it.usageTime }
-            withContext(Dispatchers.Main) {
-                allInstalledApps.clear()
-                allInstalledApps.addAll(tempList)
-            }
-        }
+    fun toggleDarkMode() {
+        isDarkMode.value = !isDarkMode.value
+        prefs.edit().putBoolean("dark_mode", isDarkMode.value).apply()
     }
 
     fun toggleWhitelist(packageName: String) {
         if (packageName == "com.android.settings") return
-        if (_whitelistedApps.contains(packageName)) _whitelistedApps.remove(packageName)
-        else _whitelistedApps.add(packageName)
+        if (_whitelistedApps.contains(packageName)) {
+            _whitelistedApps.remove(packageName)
+        } else {
+            _whitelistedApps.add(packageName)
+        }
+        prefs.edit().putString("whitelist", _whitelistedApps.joinToString(",")).apply()
     }
 
-    fun updateStepsWithContext(totalStepsFromSensor: Int, context: Context) {
-        val prefs = context.getSharedPreferences("GemGuardPrefs", Context.MODE_PRIVATE)
+    fun updateStepsOptimized(totalStepsFromSensor: Int) {
         val todayDate = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())
-        var initialSteps = prefs.getInt("initial_steps", -1)
-        val lastDate = prefs.getString("last_date", "")
-
-        if (todayDate != lastDate || initialSteps == -1) {
-            initialSteps = totalStepsFromSensor
-            prefs.edit().putString("last_date", todayDate).putInt("initial_steps", initialSteps).apply()
+        if (cachedInitialSteps == -1 || todayDate != cachedLastDate) {
+            cachedInitialSteps = totalStepsFromSensor
+            cachedLastDate = todayDate
+            prefs.edit().putString("last_date", todayDate).putInt("initial_steps", cachedInitialSteps).apply()
+        } else if (totalStepsFromSensor < cachedInitialSteps) {
+            cachedInitialSteps = totalStepsFromSensor
+            prefs.edit().putInt("initial_steps", cachedInitialSteps).apply()
         }
-        _currentSteps.value = (totalStepsFromSensor - initialSteps).coerceAtLeast(0)
+        _currentSteps.value = (totalStepsFromSensor - cachedInitialSteps).coerceAtLeast(0)
+    }
+
+    private fun loadWhitelist() {
+        val savedWhitelist = prefs.getString("whitelist", "") ?: ""
+        _whitelistedApps.clear()
+        if (savedWhitelist.isNotEmpty()) _whitelistedApps.addAll(savedWhitelist.split(","))
+        if (!_whitelistedApps.contains("com.android.settings")) _whitelistedApps.add("com.android.settings")
+    }
+
+    private fun loadUnlockedApps() {
+        val allPrefs = prefs.all
+        unlockedAppsTime.clear()
+        for ((key, value) in allPrefs) {
+            if (key.startsWith("unlock_") && value is Long && value > System.currentTimeMillis()) {
+                unlockedAppsTime[key.replace("unlock_", "")] = value
+            }
+        }
     }
 }

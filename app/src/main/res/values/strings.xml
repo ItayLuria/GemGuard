@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">GemGuard</string>
+    <string name="accessibility_service_description">GemGuard uses Accessibility Services to identify and prevent the user from going into recents apps..</string>
 </resources>
