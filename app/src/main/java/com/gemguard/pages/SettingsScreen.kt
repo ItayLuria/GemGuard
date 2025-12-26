@@ -198,12 +198,24 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                         border = BorderStroke(0.5.dp, emeraldColor.copy(alpha = 0.5f))
                     ) {
                         Column {
-                             ListItem(
+                            ListItem(
                                 modifier = Modifier.clickable { viewModel.triggerTimeMissionForTesting(context) },
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                                 headlineContent = { Text(if (isHebrew) "הפעל משימת זמן (בדיקה)" else "Trigger Time Mission") },
                                 leadingContent = { Icon(Icons.Default.Alarm, null, tint = emeraldColor) }
                             )
+
+                            // כפתור איפוס משימת זמן
+                            ListItem(
+                                modifier = Modifier.clickable {
+                                    viewModel.clearTimeMission(false, context, 0)
+                                    Toast.makeText(context, "Mission Reset", Toast.LENGTH_SHORT).show()
+                                },
+                                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                                headlineContent = { Text(if (isHebrew) "אפס משימת זמן" else "Reset Time Mission") },
+                                leadingContent = { Icon(Icons.Default.Refresh, null, tint = errorColor) }
+                            )
+
                             ListItem(
                                 modifier = Modifier.clickable {
                                     try {
@@ -218,21 +230,34 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                                 headlineContent = { Text(if (isHebrew) "הוסף 100 יהלומים" else "Add 100 Gems") },
                                 leadingContent = { Icon(Icons.Default.Diamond, null, tint = emeraldColor) }
                             )
+
+                            // כפתור הוספת 100 צעדים משופר (מעדכן גם משימת זמן)
                             ListItem(
                                 modifier = Modifier.clickable {
                                     try {
-                                        val field = viewModel.javaClass.getDeclaredField("_currentSteps")
-                                        field.isAccessible = true
-                                        val state = field.get(viewModel) as MutableState<Int>
-                                        state.value += 100
+                                        val lastKnown = prefs.getInt("last_known_total_steps", 0)
                                         val initialSteps = prefs.getInt("initial_steps", 0)
-                                        prefs.edit().putInt("initial_steps", initialSteps - 100).apply()
+
+                                        // מעדכנים את הנתונים ב-Prefs (הוספה לטוטאל והורדה מהאינישיאל)
+                                        val newTotal = lastKnown + 100
+                                        val newInitial = initialSteps - 100
+
+                                        prefs.edit().apply {
+                                            putInt("last_known_total_steps", newTotal)
+                                            putInt("initial_steps", newInitial)
+                                            apply()
+                                        }
+
+                                        // מפעילים את פונקציית העדכון ב-ViewModel שתעדכן את כל ה-States
+                                        viewModel.updateStepsOptimized(newTotal)
+
                                     } catch (e: Exception) { viewModel.initData() }
                                 },
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                headlineContent = { Text(if (isHebrew) "הוסף 100 צעדים" else "Add 100 Steps") },
+                                headlineContent = { Text(if (isHebrew) "הוסף 100 צעדים (מסונכרן)" else "Add 100 Steps (Synced)") },
                                 leadingContent = { Icon(Icons.Default.DirectionsWalk, null, tint = emeraldColor) }
                             )
+
                             ListItem(
                                 modifier = Modifier.clickable {
                                     prefs.edit().clear().commit()
@@ -252,8 +277,8 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
         }
     }
 
-    // --- DIALOGS ---
-
+    // --- DIALOGS (ללא שינוי) ---
+    // ... (שאר הדיאלוגים שלך: Language, Admin Login, Whitelist PIN וכו')
     if (showLanguageDialog) {
         AlertDialog(
             onDismissRequest = { showLanguageDialog = false },
@@ -370,7 +395,7 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
             confirmButton = {
                 Button(onClick = {
                     isProtectionEnabled = false
-                    prefs.edit().putBoolean("service_enabled", false).commit() // שימוש ב-commit
+                    prefs.edit().putBoolean("service_enabled", false).commit()
                     Toast.makeText(context, if (isHebrew) "ההגנה הושבתה" else "Protection Disabled", Toast.LENGTH_SHORT).show()
                     showDisableConfirmDialog = false
                 }, colors = ButtonDefaults.buttonColors(containerColor = errorColor)) { Text(if (isHebrew) "השבת" else "Disable") }

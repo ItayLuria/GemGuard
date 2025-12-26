@@ -31,13 +31,21 @@ class TimeMissionReceiver : BroadcastReceiver() {
     private fun createTimeMission(context: Context) {
         val prefs = context.getSharedPreferences("GemGuardPrefs", Context.MODE_PRIVATE)
 
-        val stepsGoal = Random.nextInt(500, 3001)
-        val timeLimitMinutes = Random.nextInt(30, 91)
-        val reward = (stepsGoal / 100) + (timeLimitMinutes / 5)
+        // --- 1. צעדים: בין 1000 ל-2000 בקפיצות של 50 ---
+        // הסבר: יש 21 אפשרויות (1000, 1050 ... 2000).
+        // אנחנו מגרילים מספר, כופלים ב-50 ומוסיפים למינימום.
+        val stepsSteps = (2000 - 1000) / 50 // כמה "קפיצות" יש
+        val stepsGoal = 1000 + (Random.nextInt(0, stepsSteps + 1) * 50)
 
+        // --- 2. יהלומים: בין 50 ל-150 בכפולות של 10 ---
+        val rewardSteps = (150 - 50) / 10
+        val reward = 50 + (Random.nextInt(0, rewardSteps + 1) * 10)
+
+        // --- 3. זמן: תמיד שעה עגולה (60 דקות) ---
+        val timeLimitMinutes = 60
         val endTime = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(timeLimitMinutes.toLong())
-        
-        // This value must be updated by the ViewModel whenever the step count changes.
+
+        // שליפת הצעדים הכוללים העדכניים מה-Prefs
         val lastKnownTotalSteps = prefs.getInt("last_known_total_steps", 0)
 
         prefs.edit(commit = true) {
@@ -48,28 +56,49 @@ class TimeMissionReceiver : BroadcastReceiver() {
             putInt("time_mission_start_steps", lastKnownTotalSteps)
         }
 
-        sendNotification(context, stepsGoal, timeLimitMinutes)
+        sendNotification(context, stepsGoal, timeLimitMinutes, reward)
     }
 
-    private fun sendNotification(context: Context, steps: Int, minutes: Int) {
+    private fun sendNotification(context: Context, steps: Int, minutes: Int, reward: Int) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channelId = "time_mission_channel"
 
-        // Channel creation is idempotent and safe to call multiple times.
+        // שליפת השפה מהגדרות האפליקציה
+        val prefs = context.getSharedPreferences("GemGuardPrefs", Context.MODE_PRIVATE)
+        val lang = prefs.getString("language", "iw") ?: "iw"
+        val isHebrew = lang == "iw"
+
+        val title = if (isHebrew) {
+            "משימת בונוס! | $reward Gems"
+        } else {
+            "Bonus Mission! | $reward Gems"
+        }
+
+        val content = if (isHebrew) {
+            "תלך $steps צעדים בתוך שעה והיהלומים שלך."
+        } else {
+            "Walk $steps steps within an hour and the gems are yours."
+        }
+
         val channel = NotificationChannel(channelId, "Time Missions", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "Notifications for surprise time missions"
         }
         notificationManager.createNotificationChannel(channel)
-        
-        val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pendingIntent = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_IMMUTABLE)
 
         val notification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(R.drawable.ic_launcher_foreground) // Use a reliable fallback icon
-            .setContentTitle(context.getString(R.string.time_mission_title))
-            .setContentText(context.getString(R.string.time_mission_notification_text, steps, minutes))
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle(title)
+            .setContentText(content)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setSound(soundUri)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(content)) // מאפשר לראות את כל הטקסט גם אם הוא ארוך
             .build()
 
         notificationManager.notify(3, notification)

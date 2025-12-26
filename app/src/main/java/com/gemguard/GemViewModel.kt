@@ -18,7 +18,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
-import java.util.concurrent.TimeUnit
 
 // --- Data Classes ---
 
@@ -28,9 +27,7 @@ data class Task(
     val nameEn: String,
     val requiredSteps: Int,
     val reward: Int
-) {
-    fun isCompleted(claimedIds: List<Int>) = claimedIds.contains(id)
-}
+)
 
 data class TimeMission(
     val isActive: Boolean,
@@ -83,7 +80,7 @@ class GemViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- Core Logic ---
 
-    fun initData(context: Context) { // Pass context for notifications
+    fun initData(context: Context) {
         val todayDate = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())
         val lastSavedDate = prefs.getString("last_task_date", "")
 
@@ -102,7 +99,7 @@ class GemViewModel(application: Application) : AndroidViewModel(application) {
         cachedLastDate = prefs.getString("last_date", "") ?: ""
 
         if (todayDate != lastSavedDate) {
-            val lastClaimed = prefs.getString("claimed_tasks", "") ?: ""
+            val lastClaimed = prefs.getString("yesterday_claimed", "") ?: ""
             prefs.edit().putString("yesterday_claimed", lastClaimed).apply()
             _claimedTaskIds.clear()
             prefs.edit()
@@ -123,8 +120,8 @@ class GemViewModel(application: Application) : AndroidViewModel(application) {
         loadInstalledApps()
         checkTimeMission(context)
     }
-    
-     fun initData() {
+
+    fun initData() {
         initData(getApplication<Application>().applicationContext)
     }
 
@@ -185,6 +182,8 @@ class GemViewModel(application: Application) : AndroidViewModel(application) {
         editor.apply()
     }
 
+    // --- Time Mission Logic ---
+
     fun checkTimeMission(context: Context) {
         val isActive = prefs.getBoolean("time_mission_active", false)
         if (!isActive) {
@@ -193,29 +192,40 @@ class GemViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val endTime = prefs.getLong("time_mission_end_time", 0L)
-        val stepsGoal = prefs.getInt("time_mission_steps_goal", 0)
-        val startSteps = prefs.getInt("time_mission_start_steps", 0)
-        val reward = prefs.getInt("time_mission_reward", 0)
 
-        val totalStepsNow = prefs.getInt("last_known_total_steps", 0)
-        val progress = (totalStepsNow - startSteps).coerceAtLeast(0)
-
+        // 1. בדיקת כישלון (הזמן עבר)
         if (System.currentTimeMillis() > endTime) {
             clearTimeMission(false, context, 0)
-        } else if (progress >= stepsGoal) {
-            // Mission Succeeded - but don't clear it, wait for user to claim.
+            return
+        }
+
+        // 2. טעינת המשימה ל-State במידה ואינה טעונה (למשל לאחר פתיחה מחדש)
+        if (_timeMission.value == null) {
+            val stepsGoal = prefs.getInt("time_mission_steps_goal", 0)
+            val startSteps = prefs.getInt("time_mission_start_steps", 0)
+            val reward = prefs.getInt("time_mission_reward", 0)
+            val lastKnownTotal = prefs.getInt("last_known_total_steps", startSteps)
+            val progress = (lastKnownTotal - startSteps).coerceAtLeast(0)
+
             _timeMission.value = TimeMission(true, stepsGoal, progress, endTime, reward)
-        } else {
-            _timeMission.value = TimeMission(true, stepsGoal, progress, endTime, reward)
+        }
+    }
+
+    fun claimTimeMissionReward(context: Context) {
+        val mission = _timeMission.value
+        // מוודא שהמשימה קיימת, פעילה ושהושלמה
+        if (mission != null && mission.isActive && mission.stepsProgress >= mission.stepsGoal) {
+            clearTimeMission(true, context, mission.reward)
         }
     }
 
     fun clearTimeMission(isSuccess: Boolean, context: Context, reward: Int) {
         if (isSuccess) {
-             _diamonds.value += reward
-             prefs.edit { putInt("diamonds", _diamonds.value) }
+            _diamonds.value += reward
+            prefs.edit { putInt("diamonds", _diamonds.value) }
         }
 
+        // מנקה את כל המפתחות הקשורים למשימה מה-SharedPreferences
         prefs.edit {
             remove("time_mission_active")
             remove("time_mission_steps_goal")
@@ -223,25 +233,18 @@ class GemViewModel(application: Application) : AndroidViewModel(application) {
             remove("time_mission_reward")
             remove("time_mission_start_steps")
         }
+
+        // מעלים את המשימה מה-UI
         _timeMission.value = null
     }
 
-    fun claimTimeMissionReward(context: Context) {
-        val mission = _timeMission.value
-        if (mission != null && mission.isActive && mission.stepsProgress >= mission.stepsGoal) {
-            clearTimeMission(true, context, mission.reward)
-        }
-    }
-
     fun triggerTimeMissionForTesting(context: Context) {
-        // Clear any previous mission first to avoid conflicts
-        prefs.edit {
-            remove("time_mission_active")
-        }
-        // Manually create a new one
+        prefs.edit { remove("time_mission_active") }
         val receiver = TimeMissionReceiver()
         receiver.onReceive(context, Intent())
     }
+
+    // --- App Logic ---
 
     fun setLanguage(langCode: String) {
         language.value = langCode
@@ -260,6 +263,68 @@ class GemViewModel(application: Application) : AndroidViewModel(application) {
                 apply()
             }
         }
+    }
+
+    fun updateStepsOptimized(totalStepsFromSensor: Int) {
+        val todayDate = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())
+
+        prefs.edit { putInt("last_known_total_steps", totalStepsFromSensor) }
+
+        if (cachedInitialSteps == -1 || todayDate != cachedLastDate) {
+            cachedInitialSteps = totalStepsFromSensor
+            cachedLastDate = todayDate
+            prefs.edit {
+                putString("last_date", todayDate)
+                putInt("initial_steps", cachedInitialSteps)
+            }
+        } else if (totalStepsFromSensor < cachedInitialSteps) {
+            cachedInitialSteps = totalStepsFromSensor
+            prefs.edit { putInt("initial_steps", cachedInitialSteps) }
+        }
+
+        _currentSteps.value = (totalStepsFromSensor - cachedInitialSteps).coerceAtLeast(0)
+
+        // עדכון Progress בזמן אמת ל-UI
+        if (prefs.getBoolean("time_mission_active", false)) {
+            val startTimeSteps = prefs.getInt("time_mission_start_steps", totalStepsFromSensor)
+            val endTime = prefs.getLong("time_mission_end_time", 0L)
+
+            if (System.currentTimeMillis() <= endTime) {
+                val progress = (totalStepsFromSensor - startTimeSteps).coerceAtLeast(0)
+                _timeMission.value = _timeMission.value?.copy(stepsProgress = progress)
+            }
+        }
+
+        checkTimeMission(getApplication<Application>().applicationContext)
+    }
+
+    // --- Settings & Utils ---
+
+    fun saveSettings(context: Context) {
+        prefs.edit().apply {
+            putString("app_pin", appPin.value)
+            putBoolean("dark_mode", isDarkMode.value)
+            putString("language", language.value)
+            putString("whitelist", _whitelistedApps.joinToString(","))
+            putBoolean("setup_complete", true)
+            apply()
+        }
+        isSetupCompleteState.value = true
+    }
+
+    fun toggleDarkMode() {
+        isDarkMode.value = !isDarkMode.value
+        prefs.edit().putBoolean("dark_mode", isDarkMode.value).apply()
+    }
+
+    fun toggleWhitelist(packageName: String) {
+        if (packageName == "com.android.settings") return
+        if (_whitelistedApps.contains(packageName)) {
+            _whitelistedApps.remove(packageName)
+        } else {
+            _whitelistedApps.add(packageName)
+        }
+        prefs.edit().putString("whitelist", _whitelistedApps.joinToString(",")).apply()
     }
 
     fun buyTimeForApp(packageName: String, minutes: Int, cost: Int, context: Context): Boolean {
@@ -308,67 +373,14 @@ class GemViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun saveSettings(context: Context) {
-        prefs.edit().apply {
-            putString("app_pin", appPin.value)
-            putBoolean("dark_mode", isDarkMode.value)
-            putString("language", language.value)
-            putString("whitelist", _whitelistedApps.joinToString(","))
-            putBoolean("setup_complete", true)
-            apply()
-        }
-        isSetupCompleteState.value = true
-    }
-
-    fun toggleDarkMode() {
-        isDarkMode.value = !isDarkMode.value
-        prefs.edit().putBoolean("dark_mode", isDarkMode.value).apply()
-    }
-
-    fun toggleWhitelist(packageName: String) {
-        if (packageName == "com.android.settings") return
-        if (_whitelistedApps.contains(packageName)) {
-            _whitelistedApps.remove(packageName)
-        } else {
-            _whitelistedApps.add(packageName)
-        }
-        prefs.edit().putString("whitelist", _whitelistedApps.joinToString(",")).apply()
-    }
-
-    fun updateStepsOptimized(totalStepsFromSensor: Int) {
-        val todayDate = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())
-        
-        // Save the raw sensor value for the TimeMissionReceiver
-        prefs.edit { putInt("last_known_total_steps", totalStepsFromSensor) }
-
-        if (cachedInitialSteps == -1 || todayDate != cachedLastDate) {
-            cachedInitialSteps = totalStepsFromSensor
-            cachedLastDate = todayDate
-            prefs.edit {
-                putString("last_date", todayDate)
-                putInt("initial_steps", cachedInitialSteps)
-            }
-        } else if (totalStepsFromSensor < cachedInitialSteps) {
-            // This can happen if the device reboots
-            cachedInitialSteps = totalStepsFromSensor
-            prefs.edit { putInt("initial_steps", cachedInitialSteps) }
-        }
-        _currentSteps.value = (totalStepsFromSensor - cachedInitialSteps).coerceAtLeast(0)
-        checkTimeMission(getApplication<Application>().applicationContext)
-    }
-
     private fun loadWhitelist() {
         val savedWhitelist = prefs.getString("whitelist", "") ?: ""
-        val myPackageName = getApplication<Application>().packageName 
-
+        val myPackageName = getApplication<Application>().packageName
         _whitelistedApps.clear()
-
         if (savedWhitelist.isNotEmpty()) {
             _whitelistedApps.addAll(savedWhitelist.split(","))
         }
-        if (!_whitelistedApps.contains("com.android.settings")) {
-            _whitelistedApps.add("com.android.settings")
-        }
+        if (!_whitelistedApps.contains("com.android.settings")) _whitelistedApps.add("com.android.settings")
         if (!_whitelistedApps.contains(myPackageName)) {
             _whitelistedApps.add(myPackageName)
             prefs.edit { putString("whitelist", _whitelistedApps.joinToString(",")) }
