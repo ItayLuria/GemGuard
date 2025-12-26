@@ -53,10 +53,7 @@ import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity(), SensorEventListener {
     private val viewModel: GemViewModel by viewModels()
-
-    // ניהול מצב החסימה כ-State כדי שה-UI יתעדכן מיד
     private var blockedAppPackage by mutableStateOf<String?>(null)
-
     private lateinit var sensorManager: SensorManager
     private var stepSensor: Sensor? = null
 
@@ -66,17 +63,17 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         super.onCreate(savedInstanceState)
         viewModel.initData()
 
-        // Schedule the first time mission if it hasn't been scheduled yet
+        // --- Time Mission Component Logic ---
         val prefs = getSharedPreferences("GemGuardPrefs", Context.MODE_PRIVATE)
         if (!prefs.getBoolean("time_mission_scheduled", false)) {
             TimeMissionReceiver.scheduleNextMission(this)
             prefs.edit().putBoolean("time_mission_scheduled", true).apply()
         }
+        // -------------------------------------
 
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
 
-        // בדיקה ראשונית אם נפתח בגלל חסימה
         handleIntent(intent)
 
         setContent {
@@ -87,14 +84,20 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
             var hasUsagePermission by remember { mutableStateOf(false) }
 
-            // הפעלת שירות החסימה ברגע שהכל מוכן
+            // הפעלת שירותי החסימה ברגע שהכל מוכן
             LaunchedEffect(isSetupComplete, hasUsagePermission) {
-                if (isSetupComplete && hasUsagePermission) {
-                    val blockIntent = Intent(context, BlockService::class.java)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        context.startForegroundService(blockIntent)
-                    } else {
-                        context.startService(blockIntent)
+                if (isSetupComplete) {
+                    // תיקון קריטי: לא מפעילים את RecentsBlockerService (Accessibility) ידנית!
+                    // המערכת תפעיל אותו כשהמשתמש יאשר נגישות בהגדרות.
+
+                    // 2. הפעלת שירות החסימה הראשי (BlockService) - רק אם יש הרשאה
+                    if (hasUsagePermission) {
+                        val blockIntent = Intent(context, BlockService::class.java)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            context.startForegroundService(blockIntent)
+                        } else {
+                            context.startService(blockIntent)
+                        }
                     }
                 }
             }
@@ -116,7 +119,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
                     val navController = rememberNavController()
 
-                    // הצגת דיאלוג החסימה מעל כל מסך אחר באפליקציה
                     if (blockedAppPackage != null) {
                         BlockedAppDialog(
                             packageName = blockedAppPackage!!,
@@ -125,20 +127,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                             emeraldColor = emeraldColor,
                             onDismiss = {
                                 blockedAppPackage = null
-                                // שחרור הסטטוס ב-Prefs
+                                // שחרור חסימת ה-Recents ב-Prefs ברגע שהדיאלוג נסגר
                                 context.getSharedPreferences("GemGuardPrefs", Context.MODE_PRIVATE)
                                     .edit().putBoolean("is_currently_locked", false).apply()
-
-                                // אם סוגר בלי לקנות, מעיפים אותו למסך הבית של הטלפון
-                                val homeIntent = Intent(Intent.ACTION_MAIN).apply {
-                                    addCategory(Intent.CATEGORY_HOME)
-                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                }
-                                startActivity(homeIntent)
                             },
                             onGoToStore = {
                                 blockedAppPackage = null
-                                // ניווט לחנות
                                 navController.navigate(Screen.Store.route) {
                                     popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                                     launchSingleTop = true
@@ -161,7 +155,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                                 navController = navController,
                                 startDestination = if (isSetupComplete) Screen.Home.route else "setup",
                                 enterTransition = { fadeIn(animationSpec = tween(300)) },
-                                exitTransition = { fadeOut(animationSpec = tween(300)) }
+                                exitTransition = { fadeOut(animationSpec = tween(300)) },
+                                popEnterTransition = { fadeIn(animationSpec = tween(300)) },
+                                popExitTransition = { fadeOut(animationSpec = tween(300)) }
                             ) {
                                 composable("setup") {
                                     SetupScreen(viewModel) {
@@ -171,9 +167,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                                         }
                                     }
                                 }
-                                composable(Screen.Home.route) {
-                                    Home(viewModel, onNavigateToStore = { navController.navigate(Screen.Store.route) })
-                                }
+                                composable(Screen.Home.route) { Home(viewModel, onNavigateToStore = { navController.navigate(Screen.Store.route) }) }
                                 composable(Screen.Store.route) { StoreScreen(viewModel) }
                                 composable(Screen.Tasks.route) { TasksScreen(viewModel) }
                                 composable(Screen.Settings.route) {
@@ -187,7 +181,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         }
     }
 
-    // זה המפתח לחסימה חלקה: קבלת Intent כשהאפליקציה כבר פתוחה
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -216,8 +209,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACTIVITY_RECOGNITION), 100)
-            } else { onNext() }
-        } else { onNext() }
+            } else {
+                onNext()
+            }
+        } else {
+            onNext()
+        }
     }
 
     fun requestNotificationPermission() {
@@ -239,7 +236,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     override fun onSensorChanged(e: SensorEvent?) {
-        e?.let { viewModel.updateStepsOptimized(it.values[0].toInt()) }
+        e?.let {
+            viewModel.updateStepsOptimized(it.values[0].toInt())
+        }
     }
 
     override fun onAccuracyChanged(p0: Sensor?, p1: Int) {}
@@ -281,13 +280,17 @@ fun BlockedAppDialog(
                 drawable.setBounds(0, 0, canvas.width, canvas.height)
                 drawable.draw(canvas)
                 bitmap.asImageBitmap()
-            } catch (e: Exception) { null }
+            } catch (e: Exception) {
+                null
+            }
         }
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surface,
+        titleContentColor = MaterialTheme.colorScheme.onSurface,
+        textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         icon = {
             Box(modifier = Modifier.size(100.dp)) {
                 if (appIcon != null) {
@@ -305,13 +308,21 @@ fun BlockedAppDialog(
                             .padding(12.dp)
                     )
                 }
+
                 Surface(
                     color = MaterialTheme.colorScheme.surface,
                     shape = CircleShape,
-                    modifier = Modifier.align(Alignment.BottomEnd).offset(x = 5.dp, y = 5.dp),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .offset(x = 5.dp, y = 5.dp),
                     shadowElevation = 4.dp
                 ) {
-                    Icon(Icons.Default.Lock, null, tint = emeraldColor, modifier = Modifier.padding(6.dp).size(24.dp))
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = emeraldColor,
+                        modifier = Modifier.padding(6.dp).size(24.dp)
+                    )
                 }
             }
         },
@@ -339,14 +350,32 @@ fun BlockedAppDialog(
                 colors = ButtonDefaults.buttonColors(containerColor = emeraldColor),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Icon(Icons.Default.ShoppingCart, null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(if (isHebrew) "לחנות" else "Go to store", fontWeight = FontWeight.Bold)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ShoppingCart,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        if (isHebrew) "לחנות" else "Go to store",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
-                Text(if (isHebrew) "סגור" else "Close (Exit)", color = if (isDark) Color.White.copy(alpha = 0.6f) else Color.Gray)
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    if (isHebrew) "סגור" else "Close",
+                    color = if (isDark) Color.White.copy(alpha = 0.6f) else Color.Gray
+                )
             }
         }
     )
@@ -404,6 +433,7 @@ fun MyBottomNavigationBar(navController: NavHostController, viewModel: GemViewMo
     NavigationBar(containerColor = navBackgroundColor, tonalElevation = 0.dp) {
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = navBackStackEntry?.destination?.route
+
         val screens = remember { listOf(Screen.Home, Screen.Tasks, Screen.Store, Screen.Settings) }
 
         screens.forEach { screen ->
@@ -412,7 +442,9 @@ fun MyBottomNavigationBar(navController: NavHostController, viewModel: GemViewMo
                 selected = isSelected,
                 onClick = {
                     navController.navigate(screen.route) {
-                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
                         launchSingleTop = true
                         restoreState = true
                     }
