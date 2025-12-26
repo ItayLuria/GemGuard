@@ -243,7 +243,7 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                                     } catch (e: Exception) { viewModel.initData() }
                                 },
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                headlineContent = { Text(if (isHebrew) "הוסף 100 צעדים" else "Add 100 Steps (Synced)") },
+                                headlineContent = { Text(if (isHebrew) "הוסף 100 צעדים" else "Add 100 Steps") },
                                 leadingContent = { Icon(Icons.Default.DirectionsWalk, null, tint = emeraldColor) }
                             )
 

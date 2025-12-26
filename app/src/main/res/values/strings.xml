@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">GemGuard</string>
-    <string name="accessibility_service_description">GemGuard uses Accessibility Services to identify and prevent the user from going into recents apps..</string>
+    <string name="accessibility_service_description">GemGuard uses Accessibility Services to identify and prevent the user from going into recents apps, this feature is needed to ensure that the user will not turn off the service without entering the proper PIN code.</string>
 
-    <!-- Time Mission Strings -->
     <string name="time_mission_title">Time Mission!</string>
     <string name="time_mission_notification_text">New Challenge: Walk %1$d steps in %2$d minutes!</string>
     <string name="time_mission_category_title">Time Mission</string>
