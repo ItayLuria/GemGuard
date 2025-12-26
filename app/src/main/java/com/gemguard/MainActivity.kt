@@ -63,13 +63,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         super.onCreate(savedInstanceState)
         viewModel.initData()
 
-        // --- Time Mission Component Logic ---
         val prefs = getSharedPreferences("GemGuardPrefs", Context.MODE_PRIVATE)
         if (!prefs.getBoolean("time_mission_scheduled", false)) {
             TimeMissionReceiver.scheduleNextMission(this)
             prefs.edit().putBoolean("time_mission_scheduled", true).apply()
         }
-        // -------------------------------------
 
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
@@ -84,20 +82,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
             var hasUsagePermission by remember { mutableStateOf(false) }
 
-            // הפעלת שירותי החסימה ברגע שהכל מוכן
             LaunchedEffect(isSetupComplete, hasUsagePermission) {
-                if (isSetupComplete) {
-                    // תיקון קריטי: לא מפעילים את RecentsBlockerService (Accessibility) ידנית!
-                    // המערכת תפעיל אותו כשהמשתמש יאשר נגישות בהגדרות.
-
-                    // 2. הפעלת שירות החסימה הראשי (BlockService) - רק אם יש הרשאה
-                    if (hasUsagePermission) {
-                        val blockIntent = Intent(context, BlockService::class.java)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            context.startForegroundService(blockIntent)
-                        } else {
-                            context.startService(blockIntent)
-                        }
+                if (isSetupComplete && hasUsagePermission) {
+                    val blockIntent = Intent(context, BlockService::class.java)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        context.startForegroundService(blockIntent)
+                    } else {
+                        context.startService(blockIntent)
                     }
                 }
             }
@@ -127,12 +118,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                             emeraldColor = emeraldColor,
                             onDismiss = {
                                 blockedAppPackage = null
-                                // שחרור חסימת ה-Recents ב-Prefs ברגע שהדיאלוג נסגר
                                 context.getSharedPreferences("GemGuardPrefs", Context.MODE_PRIVATE)
                                     .edit().putBoolean("is_currently_locked", false).apply()
                             },
                             onGoToStore = {
+                                val pkgToPass = blockedAppPackage!!
                                 blockedAppPackage = null
+                                // שומרים את שם החבילה ב-ViewModel לפני המעבר לחנות
+                                viewModel.appToPurchasePackage.value = pkgToPass
                                 navController.navigate(Screen.Store.route) {
                                     popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                                     launchSingleTop = true
@@ -155,9 +148,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                                 navController = navController,
                                 startDestination = if (isSetupComplete) Screen.Home.route else "setup",
                                 enterTransition = { fadeIn(animationSpec = tween(300)) },
-                                exitTransition = { fadeOut(animationSpec = tween(300)) },
-                                popEnterTransition = { fadeIn(animationSpec = tween(300)) },
-                                popExitTransition = { fadeOut(animationSpec = tween(300)) }
+                                exitTransition = { fadeOut(animationSpec = tween(300)) }
                             ) {
                                 composable("setup") {
                                     SetupScreen(viewModel) {
@@ -209,12 +200,8 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACTIVITY_RECOGNITION), 100)
-            } else {
-                onNext()
-            }
-        } else {
-            onNext()
-        }
+            } else { onNext() }
+        } else { onNext() }
     }
 
     fun requestNotificationPermission() {
@@ -236,9 +223,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     override fun onSensorChanged(e: SensorEvent?) {
-        e?.let {
-            viewModel.updateStepsOptimized(it.values[0].toInt())
-        }
+        e?.let { viewModel.updateStepsOptimized(it.values[0].toInt()) }
     }
 
     override fun onAccuracyChanged(p0: Sensor?, p1: Int) {}
@@ -254,7 +239,6 @@ fun BlockedAppDialog(
     onGoToStore: () -> Unit
 ) {
     val context = LocalContext.current
-
     val appName by produceState(initialValue = "") {
         value = withContext(Dispatchers.IO) {
             try {
@@ -280,17 +264,13 @@ fun BlockedAppDialog(
                 drawable.setBounds(0, 0, canvas.width, canvas.height)
                 drawable.draw(canvas)
                 bitmap.asImageBitmap()
-            } catch (e: Exception) {
-                null
-            }
+            } catch (e: Exception) { null }
         }
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surface,
-        titleContentColor = MaterialTheme.colorScheme.onSurface,
-        textContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
         icon = {
             Box(modifier = Modifier.size(100.dp)) {
                 if (appIcon != null) {
@@ -308,21 +288,13 @@ fun BlockedAppDialog(
                             .padding(12.dp)
                     )
                 }
-
                 Surface(
                     color = MaterialTheme.colorScheme.surface,
                     shape = CircleShape,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .offset(x = 5.dp, y = 5.dp),
+                    modifier = Modifier.align(Alignment.BottomEnd).offset(x = 5.dp, y = 5.dp),
                     shadowElevation = 4.dp
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Lock,
-                        contentDescription = null,
-                        tint = emeraldColor,
-                        modifier = Modifier.padding(6.dp).size(24.dp)
-                    )
+                    Icon(Icons.Default.Lock, null, tint = emeraldColor, modifier = Modifier.padding(6.dp).size(24.dp))
                 }
             }
         },
@@ -354,28 +326,15 @@ fun BlockedAppDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.ShoppingCart,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
+                    Icon(Icons.Default.ShoppingCart, null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        if (isHebrew) "לחנות" else "Go to store",
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text(if (isHebrew) "לחנות" else "Go to store", fontWeight = FontWeight.Bold)
                 }
             }
         },
         dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    if (isHebrew) "סגור" else "Close",
-                    color = if (isDark) Color.White.copy(alpha = 0.6f) else Color.Gray
-                )
+            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+                Text(if (isHebrew) "סגור" else "Close", color = if (isDark) Color.White.copy(alpha = 0.6f) else Color.Gray)
             }
         }
     )
@@ -437,14 +396,12 @@ fun MyBottomNavigationBar(navController: NavHostController, viewModel: GemViewMo
         val screens = remember { listOf(Screen.Home, Screen.Tasks, Screen.Store, Screen.Settings) }
 
         screens.forEach { screen ->
-            val isSelected = currentRoute == screen.route
+            val isSelected = currentRoute?.startsWith(screen.route) == true
             NavigationBarItem(
                 selected = isSelected,
                 onClick = {
                     navController.navigate(screen.route) {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
-                        }
+                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                         launchSingleTop = true
                         restoreState = true
                     }
