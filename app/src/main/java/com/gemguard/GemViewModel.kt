@@ -60,7 +60,7 @@ class GemViewModel(application: Application) : AndroidViewModel(application) {
     val allInstalledApps = mutableStateListOf<AppInfoData>()
     val unlockedAppsTime = mutableStateMapOf<String, Long>()
 
-    var setupStep = mutableIntStateOf(0)
+    val setupStep = mutableIntStateOf(0)
     private val _claimedTaskIds = mutableStateListOf<Int>()
     val claimedTaskIds: List<Int> = _claimedTaskIds
 
@@ -263,6 +263,12 @@ class GemViewModel(application: Application) : AndroidViewModel(application) {
                 apply()
             }
         }
+    }
+
+    // --- Dev Only Method ---
+    fun devAddDiamonds(amount: Int) {
+        _diamonds.value += amount
+        prefs.edit().putInt("diamonds", _diamonds.value).apply()
     }
 
     fun updateStepsOptimized(totalStepsFromSensor: Int) {

@@ -40,7 +40,6 @@ import kotlinx.coroutines.withContext
 import java.util.Calendar
 import java.util.concurrent.ConcurrentHashMap
 
-// מטמון גלובלי לאייקונים
 private val iconMemoryCache = ConcurrentHashMap<String, ImageBitmap>()
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -59,18 +58,15 @@ fun StoreScreen(viewModel: GemViewModel) {
     val darkEmerald = if (viewModel.isDarkMode.value) Color(0xFFA9DFBF) else Color(0xFF1B5E20)
     val cardBackgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
 
-    // טעינת אפליקציות אם הרשימה ריקה
     LaunchedEffect(Unit) {
         if (viewModel.allInstalledApps.isEmpty()) {
             viewModel.loadInstalledApps()
         }
     }
 
-    // --- המנגנון החדש והיציב ביותר: האזנה לבקשת רכישה מה-ViewModel ---
     LaunchedEffect(viewModel.appToPurchasePackage.value) {
         val pkg = viewModel.appToPurchasePackage.value
         if (pkg != null) {
-            // ממתינים שהרשימה תיטען
             snapshotFlow { viewModel.allInstalledApps.toList() }
                 .filter { it.isNotEmpty() }
                 .first()
@@ -79,13 +75,11 @@ fun StoreScreen(viewModel: GemViewModel) {
                     if (targetApp != null) {
                         selectedAppForPurchase = targetApp
                     }
-                    // מאפסים את הבקשה ב-ViewModel כדי שלא תיפתח שוב בטעות
                     viewModel.appToPurchasePackage.value = null
                 }
         }
     }
 
-    // טעינת סטטיסטיקות
     val statsMap = produceState<Map<String, android.app.usage.UsageStats>>(initialValue = emptyMap()) {
         value = withContext(Dispatchers.IO) {
             val today = Calendar.getInstance().apply {
@@ -95,7 +89,6 @@ fun StoreScreen(viewModel: GemViewModel) {
         }
     }
 
-    // סינון אפליקציות
     val filteredApps by remember(searchQuery, viewModel.allInstalledApps.size, viewModel.whitelistedApps) {
         derivedStateOf {
             viewModel.allInstalledApps.filter { app ->
@@ -221,7 +214,7 @@ fun StoreScreen(viewModel: GemViewModel) {
                                 containerColor = cardBackgroundColor,
                                 contentColor = MaterialTheme.colorScheme.onSurface
                             ),
-                            shape = RoundedCornerShape(16.dp),
+                            shape = RoundedCornerShape(10.dp),
                             elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -306,13 +299,15 @@ fun AppStoreItem(
             Button(
                 onClick = { onPurchaseClick(app) },
                 colors = ButtonDefaults.buttonColors(containerColor = emeraldColor),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                modifier = Modifier.height(36.dp)
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.height(34.dp).widthIn(min = 80.dp)
             ) {
                 Text(
                     text = if (isActive) (if (isHebrew) "הוסף" else "Add") else (if (isHebrew) "קנה" else "Buy"),
                     color = Color.White,
-                    fontSize = 14.sp
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.ExtraBold
                 )
             }
         }
@@ -390,7 +385,7 @@ fun PurchaseDialog(
     Dialog(onDismissRequest = onDismiss) {
         Card(
             modifier = Modifier.fillMaxWidth().wrapContentHeight(),
-            shape = RoundedCornerShape(32.dp),
+            shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
         ) {
@@ -417,8 +412,8 @@ fun PurchaseDialog(
                     Button(
                         onClick = onDismiss,
                         colors = ButtonDefaults.buttonColors(containerColor = emeraldColor),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
                     ) {
                         Text(if (isHebrew) "הבנתי, תודה" else "Got it, thanks", fontWeight = FontWeight.Bold)
                     }
@@ -475,7 +470,7 @@ fun PurchaseDialog(
                                             }
                                         },
                                         modifier = Modifier.weight(1f),
-                                        shape = RoundedCornerShape(16.dp),
+                                        shape = RoundedCornerShape(12.dp),
                                         color = if (viewModel.isDarkMode.value) Color(0xFF2C2C2C) else Color(0xFFF5F5F5),
                                         border = androidx.compose.foundation.BorderStroke(1.dp, emeraldColor.copy(alpha = 0.3f))
                                     ) {

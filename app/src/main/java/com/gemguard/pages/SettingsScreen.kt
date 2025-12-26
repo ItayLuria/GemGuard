@@ -208,11 +208,7 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                             ListItem(
                                 modifier = Modifier.clickable {
                                     try {
-                                        val field = viewModel.javaClass.getDeclaredField("_diamonds")
-                                        field.isAccessible = true
-                                        val state = field.get(viewModel) as MutableState<Int>
-                                        state.value += 100
-                                        prefs.edit().putInt("diamonds", state.value).apply()
+                                        viewModel.devAddDiamonds(100)
                                     } catch (e: Exception) { viewModel.initData() }
                                 },
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
@@ -220,26 +216,19 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                                 leadingContent = { Icon(Icons.Default.Diamond, null, tint = emeraldColor) }
                             )
 
-                            // כפתור הוספת 100 צעדים משופר (מעדכן גם משימת זמן)
                             ListItem(
                                 modifier = Modifier.clickable {
                                     try {
                                         val lastKnown = prefs.getInt("last_known_total_steps", 0)
                                         val initialSteps = prefs.getInt("initial_steps", 0)
-
-                                        // מעדכנים את הנתונים ב-Prefs (הוספה לטוטאל והורדה מהאינישיאל)
                                         val newTotal = lastKnown + 100
                                         val newInitial = initialSteps - 100
-
                                         prefs.edit().apply {
                                             putInt("last_known_total_steps", newTotal)
                                             putInt("initial_steps", newInitial)
                                             apply()
                                         }
-
-                                        // מפעילים את פונקציית העדכון ב-ViewModel שתעדכן את כל ה-States
                                         viewModel.updateStepsOptimized(newTotal)
-
                                     } catch (e: Exception) { viewModel.initData() }
                                 },
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
@@ -266,8 +255,6 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
         }
     }
 
-    // --- DIALOGS (ללא שינוי) ---
-    // ... (שאר הדיאלוגים שלך: Language, Admin Login, Whitelist PIN וכו')
     if (showLanguageDialog) {
         AlertDialog(
             onDismissRequest = { showLanguageDialog = false },
@@ -296,7 +283,15 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { showLanguageDialog = false }) { Text(if (isHebrew) "סגור" else "Close", color = emeraldColor) } }
+            confirmButton = { 
+                Button(
+                    onClick = { showLanguageDialog = false },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)
+                ) { 
+                    Text(if (isHebrew) "סגור" else "Close", color = Color.White) 
+                } 
+            }
         )
     }
 
@@ -304,22 +299,32 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
         AlertDialog(
             onDismissRequest = { showAdminLoginDialog = false; adminPasswordEntry = "" },
             containerColor = dialogContainerColor,
-            title = { Text(if (isHebrew) "כניסת מפתח" else "Developer Login") },
+            title = { Text(if (isHebrew) "כניסת מפתח" else "Developer Login", fontWeight = FontWeight.Bold, color = emeraldColor) },
             text = {
                 OutlinedTextField(
                     value = adminPasswordEntry, onValueChange = { adminPasswordEntry = it },
-                    label = { Text("Password") }, visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                    label = { Text(if (isHebrew) "סיסמה" else "Password") }, visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    shape = RoundedCornerShape(12.dp)
                 )
             },
             confirmButton = {
-                Button(onClick = {
-                    if (adminPasswordEntry == "Admin") {
-                        isAdminModeActive = true
-                        prefs.edit().putBoolean("is_admin_mode", true).commit()
-                        showAdminLoginDialog = false
-                    }
-                }, colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)) { Text("Login") }
+                Button(
+                    onClick = {
+                        if (adminPasswordEntry == "Admin") {
+                            isAdminModeActive = true
+                            prefs.edit().putBoolean("is_admin_mode", true).commit()
+                            showAdminLoginDialog = false
+                        }
+                    }, 
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)
+                ) { Text(if (isHebrew) "התחברות" else "Login") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAdminLoginDialog = false; adminPasswordEntry = "" }) {
+                    Text(if (isHebrew) "ביטול" else "Cancel", color = Color.Gray)
+                }
             }
         )
     }
@@ -328,23 +333,33 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
         AlertDialog(
             onDismissRequest = { showWhitelistPinDialog = false; enteredPin = "" },
             containerColor = dialogContainerColor,
-            title = { Text(if (isHebrew) "הכנס קוד גישה" else "Enter PIN") },
+            title = { Text(if (isHebrew) "הכנס קוד גישה" else "Enter PIN", fontWeight = FontWeight.Bold, color = emeraldColor) },
             text = {
                 Column {
                     OutlinedTextField(
                         value = enteredPin, onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) enteredPin = it },
                         isError = pinError, label = { Text("PIN") }, visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        shape = RoundedCornerShape(12.dp)
                     )
                     if (pinError) Text(if (isHebrew) "קוד שגוי" else "Incorrect PIN", color = errorColor, fontSize = 12.sp)
                 }
             },
             confirmButton = {
-                Button(onClick = {
-                    if (enteredPin == viewModel.appPin.value) {
-                        showWhitelistPinDialog = false; showWhitelistDialog = true; enteredPin = ""; pinError = false
-                    } else pinError = true
-                }, colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)) { Text(if (isHebrew) "אשר" else "Confirm") }
+                Button(
+                    onClick = {
+                        if (enteredPin == viewModel.appPin.value) {
+                            showWhitelistPinDialog = false; showWhitelistDialog = true; enteredPin = ""; pinError = false
+                        } else pinError = true
+                    }, 
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)
+                ) { Text(if (isHebrew) "אשר" else "Confirm") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWhitelistPinDialog = false; enteredPin = "" }) {
+                    Text(if (isHebrew) "ביטול" else "Cancel", color = Color.Gray)
+                }
             }
         )
     }
@@ -353,23 +368,33 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
         AlertDialog(
             onDismissRequest = { showDisablePinDialog = false; enteredPin = "" },
             containerColor = dialogContainerColor,
-            title = { Text(if (isHebrew) "הכנס קוד לביטול הגנה" else "PIN to Disable") },
+            title = { Text(if (isHebrew) "הכנס קוד לביטול הגנה" else "PIN to Disable", fontWeight = FontWeight.Bold, color = errorColor) },
             text = {
                 Column {
                     OutlinedTextField(
                         value = enteredPin, onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) enteredPin = it },
                         isError = pinError, label = { Text("PIN") }, visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        shape = RoundedCornerShape(12.dp)
                     )
                     if (pinError) Text(if (isHebrew) "קוד שגוי" else "Incorrect PIN", color = errorColor, fontSize = 12.sp)
                 }
             },
             confirmButton = {
-                Button(onClick = {
-                    if (enteredPin == viewModel.appPin.value) {
-                        showDisablePinDialog = false; showDisableConfirmDialog = true; enteredPin = ""; pinError = false
-                    } else pinError = true
-                }, colors = ButtonDefaults.buttonColors(containerColor = errorColor)) { Text(if (isHebrew) "המשך" else "Continue") }
+                Button(
+                    onClick = {
+                        if (enteredPin == viewModel.appPin.value) {
+                            showDisablePinDialog = false; showDisableConfirmDialog = true; enteredPin = ""; pinError = false
+                        } else pinError = true
+                    }, 
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = errorColor)
+                ) { Text(if (isHebrew) "המשך" else "Continue") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDisablePinDialog = false; enteredPin = "" }) {
+                    Text(if (isHebrew) "ביטול" else "Cancel", color = Color.Gray)
+                }
             }
         )
     }
@@ -379,17 +404,25 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
             onDismissRequest = { showDisableConfirmDialog = false },
             containerColor = dialogContainerColor,
             icon = { Icon(Icons.Default.Warning, null, tint = errorColor) },
-            title = { Text(if (isHebrew) "האם אתה בטוח?" else "Are you sure?") },
+            title = { Text(if (isHebrew) "האם אתה בטוח?" else "Are you sure?", fontWeight = FontWeight.Bold) },
             text = { Text(if (isHebrew) "פעולה זו תשבית את ההגנה." else "This will disable protection.") },
             confirmButton = {
-                Button(onClick = {
-                    isProtectionEnabled = false
-                    prefs.edit().putBoolean("service_enabled", false).commit()
-                    Toast.makeText(context, if (isHebrew) "ההגנה הושבתה" else "Protection Disabled", Toast.LENGTH_SHORT).show()
-                    showDisableConfirmDialog = false
-                }, colors = ButtonDefaults.buttonColors(containerColor = errorColor)) { Text(if (isHebrew) "השבת" else "Disable") }
+                Button(
+                    onClick = {
+                        isProtectionEnabled = false
+                        prefs.edit().putBoolean("service_enabled", false).commit()
+                        Toast.makeText(context, if (isHebrew) "ההגנה הושבתה" else "Protection Disabled", Toast.LENGTH_SHORT).show()
+                        showDisableConfirmDialog = false
+                    }, 
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = errorColor)
+                ) { Text(if (isHebrew) "השבת" else "Disable") }
             },
-            dismissButton = { TextButton(onClick = { showDisableConfirmDialog = false }) { Text(if (isHebrew) "ביטול" else "Cancel", color = textColor) } }
+            dismissButton = { 
+                TextButton(onClick = { showDisableConfirmDialog = false }) { 
+                    Text(if (isHebrew) "ביטול" else "Cancel", color = textColor) 
+                } 
+            }
         )
     }
 
@@ -403,11 +436,13 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
             containerColor = dialogContainerColor,
             title = {
                 Column {
-                    Text(if (isHebrew) "אפליקציות מותרות" else "Whitelisted Apps", fontWeight = FontWeight.Bold)
+                    Text(if (isHebrew) "אפליקציות מותרות" else "Whitelisted Apps", fontWeight = FontWeight.Bold, color = emeraldColor)
+                    Spacer(modifier = Modifier.height(12.dp))
                     OutlinedTextField(
                         value = whitelistSearchQuery, onValueChange = { whitelistSearchQuery = it },
                         placeholder = { Text(if (isHebrew) "חפש..." else "Search...") },
-                        modifier = Modifier.fillMaxWidth(), leadingIcon = { Icon(Icons.Default.Search, null) }
+                        modifier = Modifier.fillMaxWidth(), leadingIcon = { Icon(Icons.Default.Search, null) },
+                        shape = RoundedCornerShape(12.dp)
                     )
                 }
             },
@@ -416,7 +451,7 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                     LazyColumn {
                         items(filteredApps, key = { it.packageName }) { app ->
                             val isChecked = viewModel.whitelistedApps.contains(app.packageName)
-                            Row(modifier = Modifier.fillMaxWidth().clickable { viewModel.toggleWhitelist(app.packageName) }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { viewModel.toggleWhitelist(app.packageName) }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Checkbox(checked = isChecked, onCheckedChange = { viewModel.toggleWhitelist(app.packageName) }, colors = CheckboxDefaults.colors(checkedColor = emeraldColor))
                                 Text(app.name, color = if (isChecked) emeraldColor else textColor, modifier = Modifier.weight(1f))
                             }
@@ -425,7 +460,16 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                 }
             },
             confirmButton = {
-                Button(onClick = { viewModel.saveSettings(context); showWhitelistDialog = false }, colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)) { Text(if (isHebrew) "שמור" else "Save") }
+                Button(
+                    onClick = { viewModel.saveSettings(context); showWhitelistDialog = false }, 
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)
+                ) { Text(if (isHebrew) "שמור" else "Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWhitelistDialog = false }) {
+                    Text(if (isHebrew) "ביטול" else "Cancel", color = Color.Gray)
+                }
             }
         )
     }
