@@ -66,6 +66,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         super.onCreate(savedInstanceState)
         viewModel.initData()
 
+        // Schedule the first time mission if it hasn't been scheduled yet
+        val prefs = getSharedPreferences("GemGuardPrefs", Context.MODE_PRIVATE)
+        if (!prefs.getBoolean("time_mission_scheduled", false)) {
+            TimeMissionReceiver.scheduleNextMission(this)
+            prefs.edit().putBoolean("time_mission_scheduled", true).apply()
+        }
+
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
 

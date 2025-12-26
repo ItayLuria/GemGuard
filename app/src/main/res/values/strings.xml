@@ -1,4 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">GemGuard</string>
     <string name="accessibility_service_description">GemGuard uses Accessibility Services to identify and prevent the user from going into recents apps..</string>
+
+    <!-- Time Mission Strings -->
+    <string name="time_mission_title">Time Mission!</string>
+    <string name="time_mission_notification_text">New Challenge: Walk %1$d steps in %2$d minutes!</string>
+    <string name="time_mission_category_title">Time Mission</string>
+    <string name="time_mission_steps_format">%1$d / %2$d Steps</string>
+    <string name="time_mission_failed_title">Mission Failed</string>
+    <string name="time_mission_failed_text">You ran out of time. Better luck next time!</string>
+    <string name="time_mission_success_title">Mission Complete!</string>
+    <string name="time_mission_success_text">Great job! You earned %1$d gems.</string>
+    <string name="time_mission_claim_button">Claim Reward</string>
 </resources>

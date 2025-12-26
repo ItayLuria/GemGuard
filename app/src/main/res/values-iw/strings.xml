@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GemGuard</string>
+    <string name="accessibility_service_description">GemGuard משתמש בשירותי נגישות כדי לזהות ולמנוע מהמשתמש להיכנס לאפליקציות אחרונות.</string>
+
+    <!-- Time Mission Strings -->
+    <string name="time_mission_title">משימת זמן!</string>
+    <string name="time_mission_notification_text">אתגר חדש: בצע %1$d צעדים ב-%2$d דקות!</string>
+    <string name="time_mission_category_title">משימת זמן</string>
+    <string name="time_mission_steps_format">%1$d / %2$d צעדים</string>
+    <string name="time_mission_failed_title">המשימה נכשלה</string>
+    <string name="time_mission_failed_text">הזמן אזל. בהצלחה בפעם הבאה!</string>
+    <string name="time_mission_success_title">המשימה הושלמה!</string>
+    <string name="time_mission_success_text">כל הכבוד! זכית ב-%1$d יהלומים.</string>
+    <string name="time_mission_claim_button">איסוף הפרס</string>
+</resources>

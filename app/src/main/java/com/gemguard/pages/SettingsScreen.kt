@@ -39,7 +39,6 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
 
     val prefs = remember { context.getSharedPreferences("GemGuardPrefs", Context.MODE_PRIVATE) }
 
-    // מצב הגנה
     var isProtectionEnabled by remember {
         mutableStateOf(prefs.getBoolean("service_enabled", true))
     }
@@ -48,7 +47,6 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
         mutableStateOf(prefs.getBoolean("is_admin_mode", false))
     }
 
-    // ניהול דיאלוגים
     var showWhitelistPinDialog by remember { mutableStateOf(false) }
     var showDisablePinDialog by remember { mutableStateOf(false) }
     var showDisableConfirmDialog by remember { mutableStateOf(false) }
@@ -156,7 +154,6 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                                     onCheckedChange = { shouldEnable ->
                                         if (shouldEnable) {
                                             isProtectionEnabled = true
-                                            // שימוש ב-commit() לכתיבה מיידית לדיסק
                                             prefs.edit().putBoolean("service_enabled", true).commit()
                                             Toast.makeText(context, if (isHebrew) "ההגנה הופעלה" else "Protection Enabled", Toast.LENGTH_SHORT).show()
                                         } else {
@@ -201,6 +198,12 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                         border = BorderStroke(0.5.dp, emeraldColor.copy(alpha = 0.5f))
                     ) {
                         Column {
+                             ListItem(
+                                modifier = Modifier.clickable { viewModel.triggerTimeMissionForTesting(context) },
+                                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                                headlineContent = { Text(if (isHebrew) "הפעל משימת זמן (בדיקה)" else "Trigger Time Mission") },
+                                leadingContent = { Icon(Icons.Default.Alarm, null, tint = emeraldColor) }
+                            )
                             ListItem(
                                 modifier = Modifier.clickable {
                                     try {
