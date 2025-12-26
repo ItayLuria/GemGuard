@@ -36,10 +36,8 @@ class TimerService : Service() {
     }
 
     private fun startGlobalTimer() {
-        // אם הטיימר כבר רץ, לא צריך להפעיל אותו מחדש
         if (timerJob?.isActive == true) return
 
-        // שליפת השפה
         val prefs = getSharedPreferences("GemGuardPrefs", Context.MODE_PRIVATE)
         val language = prefs.getString("language", "en") ?: "en"
         val isHebrew = language == "iw"
@@ -48,58 +46,70 @@ class TimerService : Service() {
             while (isActive) {
                 val currentTime = System.currentTimeMillis()
 
-                // 1. הסרת אפליקציות שהזמן שלהן נגמר
+                // 1. ניקוי אפליקציות שפג תוקפן
                 val expiredApps = activeTimers.filter { it.value <= currentTime }.keys
                 expiredApps.forEach { key ->
                     activeTimers.remove(key)
                     appNames.remove(key)
                 }
 
-                // אם אין יותר טיימרים פעילים - עוצרים את ה-Service ומסירים את ההתראה
-                if (activeTimers.isEmpty()) {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
-                    break
+                // 2. קביעת תוכן ההתראה לפי מצב הרשימה
+                val isListEmpty = activeTimers.isEmpty()
+                val title: String
+                val contentText: String
+
+                if (isListEmpty) {
+                    title = "GemGuard"
+                    contentText = if (isHebrew) "אין אפליקציות פעילות כרגע" else "No active apps right now"
+                } else {
+                    title = if (isHebrew) "אפליקציות פעילות" else "Active Apps"
+                    val notificationLines = activeTimers.map { (pkg, expiry) ->
+                        val timeLeft = (expiry - currentTime).coerceAtLeast(0)
+                        val minutes = (timeLeft / 1000) / 60
+                        val seconds = (timeLeft / 1000) % 60
+                        val name = appNames[pkg] ?: (if (isHebrew) "אפליקציה" else "App")
+                        val timeString = String.format("%02d:%02d", minutes, seconds)
+                        if (isHebrew) "$name: $timeString" else "$name: $timeString left"
+                    }
+                    contentText = notificationLines.joinToString("\n")
                 }
 
-                // 2. בניית הטקסט להתראה
-                // ניצור רשימה של שורות, שורה לכל אפליקציה
-                val notificationLines = activeTimers.map { (pkg, expiry) ->
-                    val timeLeft = expiry - currentTime
-                    val minutes = (timeLeft / 1000) / 60
-                    val seconds = (timeLeft / 1000) % 60
-                    val name = appNames[pkg] ?: (if (isHebrew) "אפליקציה" else "App")
-                    val timeString = String.format("%02d:%02d", minutes, seconds)
-
-                    if (isHebrew) "$name: $timeString" else "$name: $timeString left"
-                }
-
-                // נחבר את השורות לטקסט אחד
-                val contentText = notificationLines.joinToString("\n")
-
-                // כותרת
-                val title = if (isHebrew) "אפליקציות פעילות" else "Active Apps"
-
-                // 3. עדכון ההתראה
-                val notification = NotificationCompat.Builder(this@TimerService, "timer_channel")
+                // 3. בניית ועדכון ההתראה
+                val notificationBuilder = NotificationCompat.Builder(this@TimerService, "timer_channel")
                     .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
                     .setContentTitle(title)
-                    .setContentText(if (notificationLines.isNotEmpty()) notificationLines[0] else "") // מציג שורה ראשונה בטקסט הקצר
-                    .setStyle(NotificationCompat.BigTextStyle().bigText(contentText)) // מציג את כל השורות בהרחבה
-                    .setOngoing(true)
-                    .setOnlyAlertOnce(true) // חשוב! מונע צפצוף/רעידה כל שנייה כשהטקסט מתעדכן
-                    .setPriority(NotificationCompat.PRIORITY_LOW) // עדיפות נמוכה כדי לא להסתיר הודעות חשובות
-                    .build()
+                    .setContentText(if (isListEmpty) contentText else contentText.lines().first())
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(contentText))
+                    .setOnlyAlertOnce(true)
+                    .setPriority(NotificationCompat.PRIORITY_LOW)
 
-                // מזהה 1 משמש לעדכון אותה התראה שוב ושוב
-                startForeground(1, notification)
+                if (isListEmpty) {
+                    // כשהרשימה ריקה: מאפשרים למשתמש להחליק את ההתראה (מבטלים ongoing)
+                    notificationBuilder.setOngoing(false)
+                    val finalNotification = notificationBuilder.build()
 
-                // ממתינים שנייה לפני העדכון הבא
+                    // עדכון אחרון לפני סגירה
+                    val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    manager.notify(1, finalNotification)
+
+                    // עצירת השירות והסרת מצב Foreground (מבלי למחוק את ההתראה האחרונה)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        stopForeground(STOP_FOREGROUND_DETACH)
+                    } else {
+                        stopForeground(false)
+                    }
+                    stopSelf()
+                    break // יוצאים מהלולאה
+                } else {
+                    // כשיש אפליקציות: ההתראה דביקה
+                    notificationBuilder.setOngoing(true)
+                    startForeground(1, notificationBuilder.build())
+                }
+
                 delay(1000)
             }
         }
     }
-
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val prefs = getSharedPreferences("GemGuardPrefs", Context.MODE_PRIVATE)

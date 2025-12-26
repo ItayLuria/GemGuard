@@ -8,14 +8,15 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import android.text.TextUtils
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -28,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,7 +47,12 @@ fun SetupScreen(viewModel: GemViewModel, onComplete: () -> Unit) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val isHebrew = viewModel.language.value == "iw"
     val emeraldColor = Color(0xFF2ECC71)
-    var pin by remember { mutableStateOf("") }
+
+    // משתני PIN לניהול האימות
+    var pinFirstEntry by remember { mutableStateOf("") }
+    var pinConfirmEntry by remember { mutableStateOf("") }
+    var showConfirmDialog by remember { mutableStateOf(false) }
+
     val currentStep by viewModel.setupStep
 
     // --- פונקציות עזר לבדיקת הרשאות ---
@@ -81,11 +88,11 @@ fun SetupScreen(viewModel: GemViewModel, onComplete: () -> Unit) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 when (currentStep) {
-                    2 -> if (hasStepPermission()) viewModel.setupStep.intValue = 3
-                    3 -> if (hasNotificationPermission()) viewModel.setupStep.intValue = 4
-                    4 -> if (hasUsagePermission()) viewModel.setupStep.intValue = 5
-                    5 -> if (hasOverlayPermission()) viewModel.setupStep.intValue = 6
-                    6 -> if (isAccessibilityEnabled()) {
+                    3 -> if (hasStepPermission()) viewModel.setupStep.intValue = 4
+                    4 -> if (hasNotificationPermission()) viewModel.setupStep.intValue = 5
+                    5 -> if (hasUsagePermission()) viewModel.setupStep.intValue = 6
+                    6 -> if (hasOverlayPermission()) viewModel.setupStep.intValue = 7
+                    7 -> if (isAccessibilityEnabled()) {
                         viewModel.saveSettings(context)
                         onComplete()
                     }
@@ -96,113 +103,257 @@ fun SetupScreen(viewModel: GemViewModel, onComplete: () -> Unit) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        // מחוון צעדים (Step Indicator)
-        Row(modifier = Modifier.padding(top = 10.dp, bottom = 30.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            repeat(7) { index ->
-                Box(modifier = Modifier
-                    .size(if (currentStep == index) 12.dp else 8.dp)
-                    .clip(CircleShape)
-                    .background(if (currentStep == index) emeraldColor else Color.LightGray)
-                )
-            }
-        }
-
-        AnimatedContent(
-            targetState = currentStep,
-            label = "SetupTransition",
-            transitionSpec = { fadeIn() togetherWith fadeOut() }
-        ) { step ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxSize()) {
-                when (step) {
-                    0 -> { // בחירת שפה
-                        Icon(Icons.Default.Language, null, modifier = Modifier.size(70.dp), tint = emeraldColor)
-                        Text(if(isHebrew) "ברוכים הבאים" else "Welcome", fontSize = 28.sp, fontWeight = FontWeight.Bold)
-                        Text(if(isHebrew) "בחר את שפת הממשק" else "Choose interface language", color = Color.Gray)
-                        Spacer(modifier = Modifier.height(24.dp))
-                        listOf("iw" to "עברית", "en" to "English").forEach { (code, label) ->
-                            val selected = viewModel.language.value == code
-                            OutlinedButton(
-                                onClick = { viewModel.setLanguage(code) },
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                border = BorderStroke(2.dp, if(selected) emeraldColor else Color.LightGray),
-                                colors = ButtonDefaults.outlinedButtonColors(containerColor = if(selected) emeraldColor.copy(alpha = 0.05f) else Color.Transparent)
-                            ) { Text(label, color = if(selected) emeraldColor else Color.Gray) }
-                        }
-                        InfoCard(if(isHebrew) "השפה שתבחר תחול על כל התפריטים וההתראות באפליקציה." else "The language will affect all menus and notifications.")
-                        Spacer(modifier = Modifier.weight(1f))
-                        Button(onClick = { viewModel.setupStep.intValue = 1 }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)) {
-                            Text(if(isHebrew) "המשך" else "Continue")
-                        }
-                    }
-
-                    1 -> { // הגדרת PIN
-                        Icon(Icons.Default.Lock, null, modifier = Modifier.size(70.dp), tint = emeraldColor)
-                        Text(if(isHebrew) "הגדר קוד נעילה" else "Set locking PIN", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        OutlinedTextField(
-                            value = pin,
-                            onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) pin = it },
-                            label = { Text(if(isHebrew) "קוד PIN (4 ספרות)" else "4-Digit PIN") },
-                            modifier = Modifier.fillMaxWidth(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                        )
-                        InfoCard(if(isHebrew) "הקוד נדרש כדי לשנות הגדרות או לבטל את החסימה. ללא קוד, לא ניתן יהיה לעקוף את חסימת האפליקציות." else "The PIN is required to change settings or disable app locking. Without it, the lock cannot be bypassed.")
-                        Spacer(modifier = Modifier.weight(1f))
-                        Button(
-                            onClick = { viewModel.appPin.value = pin; viewModel.setupStep.intValue = 2 },
-                            enabled = pin.length == 4,
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)
-                        ) { Text(if(isHebrew) "המשך" else "Next") }
-                    }
-
-                    2 -> PermissionStep(
-                        icon = Icons.Default.DirectionsWalk,
-                        title = if(isHebrew) "סנכרון פעילות" else "Activity Sync",
-                        desc = if(isHebrew) "גישה למד הצעדים של המכשיר" else "Access to device step counter",
-                        info = if(isHebrew) "הצעדים שלך הם הלב של האפליקציה. אנחנו צריכים את ההרשאה הזו כדי להמיר את ההליכה שלך לזמן מסך באמצעות Gems." else "Your steps are the heart of our app. We need this permission to convert your physical movement into screen time through gems.",
-                        btnText = if(isHebrew) "אשר גישה" else "Grant Access",
-                        onClick = { (context as? MainActivity)?.requestStepPermission {} }
-                    )
-
-                    3 -> PermissionStep(
-                        icon = Icons.Default.NotificationsActive,
-                        title = if(isHebrew) "התראות" else "Notifications",
-                        desc = if(isHebrew) "הצגת זמן זמני האפליקציות ועדכונים" else "Show remaining app time and updates",
-                        info = if(isHebrew) "אנחנו שולחים התראות כשזמן האפליקציה עומד להיגמר וכדי להציג את הטיימר בזמן אמת." else "We notify you when the app's time is running out.",
-                        btnText = if(isHebrew) "אשר התראות" else "Allow Notifications",
-                        onClick = { (context as? MainActivity)?.requestNotificationPermission() }
-                    )
-
-                    4 -> PermissionStep(
-                        icon = Icons.Default.QueryStats,
-                        title = if(isHebrew) "זיהוי אפליקציות" else "App Detection",
-                        desc = if(isHebrew) "צפייה באפליקציות הפועלות בטלפון" else "Monitor active application",
-                        info = if(isHebrew) "כדי לדעת אם פתחת אפליקציה חסומה, המערכת צריכה לדעת איזו אפליקציה נמצאת בשימוש כרגע." else "To know if you've opened a restricted app, the system needs to see which app is currently in the background.",
-                        btnText = if(isHebrew) "פתח הגדרות" else "Open Settings",
-                        onClick = { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }
-                    )
-
-                    5 -> PermissionStep(
-                        icon = Icons.Default.Layers,
-                        title = if(isHebrew) "מסך חסימה" else "Blocking Screen",
-                        desc = if(isHebrew) "תצוגה מעל אפליקציות" else "Display over other apps",
-                        info = if(isHebrew) "זו ההרשאה שמאפשרת לנו להציג את חסימת האפליקציות ולמנוע את השימוש בהן." else "This allows us to block restricted apps, physically preventing their use.",
-                        btnText = if(isHebrew) "אישור ההרשאה" else "Allow Permission",
-                        onClick = { context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))) }
-                    )
-
-                    6 -> PermissionStep(
-                        icon = Icons.Default.Security,
-                        title = if(isHebrew) "הגנה הרמטית" else "Ironclad Protection",
-                        desc = if(isHebrew) "מניעת עקיפת החסימה" else "Prevent bypass techniques",
-                        info = if(isHebrew) "שירות הנגישות מונע ממך להשתמש בכפתור ה'יישומים אחרונים' כדי לעקוף את החסימה." else "The Accessibility service prevents using the 'Recent Apps' button to bypass the lock.",
-                        btnText = if(isHebrew) "הפעל הגנה" else "Enable Protection",
-                        onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+    // שימוש ב-Box עם imePadding מבטיח שהתוכן יזוז למעלה כשהמקלדת נפתחת
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .imePadding()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // מחוון צעדים (8 נקודות)
+            Row(
+                modifier = Modifier.padding(top = 10.dp, bottom = 30.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                repeat(8) { index ->
+                    Box(
+                        modifier = Modifier
+                            .size(if (currentStep == index) 12.dp else 8.dp)
+                            .clip(CircleShape)
+                            .background(if (currentStep == index) emeraldColor else Color.LightGray)
                     )
                 }
             }
+
+            AnimatedContent(
+                targetState = currentStep,
+                label = "SetupTransition",
+                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                modifier = Modifier.weight(1f) // נותן לתוכן המשתנה לתפוס את הגובה הזמין
+            ) { step ->
+                // ScrollState מאפשר גלילה רק בתוך שלב ספציפי אם המקלדת מסתירה חלק מהמידע
+                val stepScrollState = rememberScrollState()
+
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(stepScrollState)
+                ) {
+                    when (step) {
+                        0 -> { // שלב 0: בחירת שפה
+                            Icon(Icons.Default.Language, null, modifier = Modifier.size(70.dp), tint = emeraldColor)
+                            Text(if(isHebrew) "ברוכים הבאים" else "Welcome", fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                            Text(if(isHebrew) "בחר את שפת הממשק" else "Choose language", color = Color.Gray)
+                            Spacer(modifier = Modifier.height(24.dp))
+                            listOf("iw" to "עברית", "en" to "English").forEach { (code, label) ->
+                                val selected = viewModel.language.value == code
+                                OutlinedButton(
+                                    onClick = { viewModel.setLanguage(code) },
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    border = BorderStroke(2.dp, if(selected) emeraldColor else Color.LightGray),
+                                    colors = ButtonDefaults.outlinedButtonColors(containerColor = if(selected) emeraldColor.copy(alpha = 0.05f) else Color.Transparent)
+                                ) { Text(label, color = if(selected) emeraldColor else Color.Gray) }
+                            }
+                            InfoCard(if(isHebrew) "השפה שתבחר תחול על כל התפריטים וההתראות." else "Language affects all menus and notifications.")
+                            Spacer(modifier = Modifier.weight(1f))
+                            Button(onClick = { viewModel.setupStep.intValue = 1 }, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)) {
+                                Text(if(isHebrew) "המשך" else "Continue", fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        1 -> { // שלב 1: בחירת Dark/Light Mode
+                            Icon(if(viewModel.isDarkMode.value) Icons.Default.DarkMode else Icons.Default.LightMode, null, modifier = Modifier.size(70.dp), tint = emeraldColor)
+                            Text(if(isHebrew) "מראה האפליקציה" else "App Appearance", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                            Text(if(isHebrew) "בחר סגנון מועדף" else "Choose your style", color = Color.Gray)
+                            Spacer(modifier = Modifier.height(32.dp))
+
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                AppearanceOption(
+                                    label = if(isHebrew) "בהיר" else "Light",
+                                    icon = Icons.Default.LightMode,
+                                    isSelected = !viewModel.isDarkMode.value,
+                                    modifier = Modifier.weight(1f),
+                                    emeraldColor = emeraldColor,
+                                    onClick = { viewModel.isDarkMode.value = false }
+                                )
+                                AppearanceOption(
+                                    label = if(isHebrew) "כהה" else "Dark",
+                                    icon = Icons.Default.DarkMode,
+                                    isSelected = viewModel.isDarkMode.value,
+                                    modifier = Modifier.weight(1f),
+                                    emeraldColor = emeraldColor,
+                                    onClick = { viewModel.isDarkMode.value = true }
+                                )
+                            }
+
+                            InfoCard(if(isHebrew) "ניתן לשנות זאת בכל עת בהגדרות." else "Can be changed anytime in settings.")
+                            Spacer(modifier = Modifier.weight(1f))
+                            Button(onClick = { viewModel.setupStep.intValue = 2 }, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)) {
+                                Text(if(isHebrew) "המשך" else "Continue", fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        2 -> { // שלב 2: הגדרת PIN
+                            Icon(Icons.Default.Lock, null, modifier = Modifier.size(70.dp), tint = emeraldColor)
+                            Text(if(isHebrew) "הגדר קוד נעילה" else "Set locking PIN", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            OutlinedTextField(
+                                value = pinFirstEntry,
+                                onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) pinFirstEntry = it },
+                                placeholder = { Text(if(isHebrew) "הכנס PIN" else "Enter PIN") },
+                                label = { Text(if(isHebrew) "קוד PIN (4 ספרות)" else "4-Digit PIN") },
+                                modifier = Modifier.fillMaxWidth(),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                visualTransformation = PasswordVisualTransformation(),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            InfoCard(if(isHebrew) "הקוד נדרש כדי לבטל את החסימה." else "The PIN is required to bypass the lock.")
+                            Spacer(modifier = Modifier.weight(1f))
+                            Button(
+                                onClick = { showConfirmDialog = true },
+                                enabled = pinFirstEntry.length == 4,
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = emeraldColor),
+                                shape = RoundedCornerShape(12.dp)
+                            ) { Text(if(isHebrew) "המשך" else "Next", fontWeight = FontWeight.Bold) }
+
+                            if (showConfirmDialog) {
+                                AlertDialog(
+                                    onDismissRequest = { showConfirmDialog = false; pinConfirmEntry = "" },
+                                    shape = RoundedCornerShape(24.dp),
+                                    title = {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                                            Icon(Icons.Default.VerifiedUser, null, tint = emeraldColor, modifier = Modifier.size(40.dp))
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(if(isHebrew) "אישור קוד PIN" else "Confirm PIN", fontWeight = FontWeight.Bold)
+                                        }
+                                    },
+                                    text = {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text(
+                                                if(isHebrew) "הקש שוב את הקוד לאישור:" else "Re-enter your PIN to confirm:",
+                                                textAlign = TextAlign.Center, color = Color.Gray
+                                            )
+                                            Spacer(modifier = Modifier.height(16.dp))
+                                            OutlinedTextField(
+                                                value = pinConfirmEntry,
+                                                onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) pinConfirmEntry = it },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                                visualTransformation = PasswordVisualTransformation(),
+                                                placeholder = { Text(if(isHebrew) "הכנס PIN" else "Re-enter PIN") },
+                                                shape = RoundedCornerShape(12.dp),
+                                                isError = pinConfirmEntry.length == 4 && pinConfirmEntry != pinFirstEntry
+                                            )
+                                            if (pinConfirmEntry.length == 4 && pinConfirmEntry != pinFirstEntry) {
+                                                Text(if(isHebrew) "הקודים אינם תואמים" else "PINs don't match", color = MaterialTheme.colorScheme.error, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                                            }
+                                        }
+                                    },
+                                    confirmButton = {
+                                        Button(
+                                            onClick = {
+                                                if (pinConfirmEntry == pinFirstEntry) {
+                                                    viewModel.appPin.value = pinConfirmEntry
+                                                    showConfirmDialog = false
+                                                    viewModel.setupStep.intValue = 3
+                                                }
+                                            },
+                                            enabled = pinConfirmEntry == pinFirstEntry,
+                                            shape = RoundedCornerShape(12.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)
+                                        ) {
+                                            Text(if(isHebrew) "אישור" else "Confirm")
+                                        }
+                                    },
+                                    dismissButton = {
+                                        TextButton(onClick = { showConfirmDialog = false; pinConfirmEntry = "" }) {
+                                            Text(if(isHebrew) "ביטול" else "Cancel", color = Color.Gray)
+                                        }
+                                    }
+                                )
+                            }
+                        }
+
+                        3 -> PermissionStep(
+                            icon = Icons.Default.DirectionsWalk,
+                            title = if(isHebrew) "סנכרון פעילות" else "Activity Sync",
+                            desc = if(isHebrew) "גישה למד הצעדים" else "Access to steps",
+                            info = if(isHebrew) "הצעדים שלך הם הבסיס לאפליקציה. אנחנו צריכים גישה כדי להמיר הליכה לזמן מסך." else "We need this to convert movement into screen time.",
+                            btnText = if(isHebrew) "אשר גישה" else "Grant Access",
+                            onClick = { (context as? MainActivity)?.requestStepPermission {} }
+                        )
+
+                        4 -> PermissionStep(
+                            icon = Icons.Default.NotificationsActive,
+                            title = if(isHebrew) "התראות" else "Notifications",
+                            desc = if(isHebrew) "הצגת זמני האפליקציות" else "Show remaining time",
+                            info = if(isHebrew) "נשלח התראות כשהזמן עומד להיגמר וכדי להציג טיימר פעיל." else "We notify you when app time is running out.",
+                            btnText = if(isHebrew) "אשר התראות" else "Allow",
+                            onClick = { (context as? MainActivity)?.requestNotificationPermission() }
+                        )
+
+                        5 -> PermissionStep(
+                            icon = Icons.Default.QueryStats,
+                            title = if(isHebrew) "זיהוי אפליקציות" else "App Detection",
+                            desc = if(isHebrew) "צפייה באפליקציות פועלות" else "Monitor active apps",
+                            info = if(isHebrew) "כדי לדעת אם פתחת אפליקציה חסומה, עלינו לזהות מה פתוח כרגע." else "Required to detect when a blocked app is opened.",
+                            btnText = if(isHebrew) "פתח הגדרות" else "Settings",
+                            onClick = { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }
+                        )
+
+                        6 -> PermissionStep(
+                            icon = Icons.Default.Layers,
+                            title = if(isHebrew) "מסך חסימה" else "Blocking Screen",
+                            desc = if(isHebrew) "תצוגה מעל אפליקציות" else "Display over apps",
+                            info = if(isHebrew) "זו ההרשאה שמאפשרת לנו להציג את מסך הנעילה מעל האפליקציה החסומה." else "Allows the lock screen to appear over restricted apps.",
+                            btnText = if(isHebrew) "אישור" else "Allow",
+                            onClick = { context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))) }
+                        )
+
+                        7 -> PermissionStep(
+                            icon = Icons.Default.SettingsAccessibility, // שיניתי לאייקון נגישות רשמי יותר
+                            title = if(isHebrew) "שירותי נגישות" else "Accessibility Service",
+                            desc = if(isHebrew) "לחסימה מאובטחת יותר" else "For secure blocking",
+                            info = if(isHebrew) "שימוש בשירות הנגישות מבטיח שהחסימה לא תעקף על ידי שימוש בכפתור 'יישומים אחרונים' או פיצול מסך."
+                            else "Accessibility ensures the lock cannot be bypassed using the recent apps button or split screen.",
+                            btnText = if(isHebrew) "הגדרת נגישות" else "Configure",
+                            onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+                        )
+
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AppearanceOption(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    isSelected: Boolean,
+    modifier: Modifier,
+    emeraldColor: Color,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(110.dp),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(if(isSelected) 2.dp else 1.dp, if(isSelected) emeraldColor else Color.LightGray.copy(alpha = 0.5f)),
+        color = if(isSelected) emeraldColor.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Icon(icon, null, tint = if(isSelected) emeraldColor else Color.Gray, modifier = Modifier.size(28.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(label, fontWeight = FontWeight.Bold, color = if(isSelected) emeraldColor else Color.Gray)
         }
     }
 }
@@ -238,36 +389,23 @@ fun InfoCard(text: String) {
     val emeraldColor = Color(0xFF2ECC71)
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
         shape = RoundedCornerShape(12.dp),
-        // שימוש ב-surfaceVariant עם שקיפות יוצר גוון ניטרלי (אפרפר/כהה) ללא סגול
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
             contentColor = MaterialTheme.colorScheme.onSurface
         ),
-        // מסגרת עדינה מאוד שמתאימה את עצמה לצבע הטקסט
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            Icon(
-                imageVector = Icons.Default.Info,
-                contentDescription = null,
-                tint = emeraldColor, // שימוש בירוק של האפליקציה במקום צבע מערכת
-                modifier = Modifier.size(22.dp)
-            )
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
+            Icon(Icons.Default.Info, null, tint = emeraldColor, modifier = Modifier.size(22.dp))
             Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = text,
                 fontSize = 14.sp,
                 lineHeight = 20.sp,
                 textAlign = if (isHebrew) TextAlign.Right else TextAlign.Left,
-                modifier = Modifier.fillMaxWidth(),
-                style = MaterialTheme.typography.bodyMedium
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }

@@ -30,6 +30,7 @@
         android:theme="@style/Theme.GemGuard">
 
         <activity
+            android:windowSoftInputMode="adjustResize"
             android:name=".MainActivity"
             android:excludeFromRecents="true"
             android:launchMode="singleTop"
