@@ -201,19 +201,8 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                             ListItem(
                                 modifier = Modifier.clickable { viewModel.triggerTimeMissionForTesting(context) },
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                headlineContent = { Text(if (isHebrew) "הפעל משימת זמן (בדיקה)" else "Trigger Time Mission") },
+                                headlineContent = { Text(if (isHebrew) "הפעל משימת זמן" else "Trigger Time Mission") },
                                 leadingContent = { Icon(Icons.Default.Alarm, null, tint = emeraldColor) }
-                            )
-
-                            // כפתור איפוס משימת זמן
-                            ListItem(
-                                modifier = Modifier.clickable {
-                                    viewModel.clearTimeMission(false, context, 0)
-                                    Toast.makeText(context, "Mission Reset", Toast.LENGTH_SHORT).show()
-                                },
-                                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                headlineContent = { Text(if (isHebrew) "אפס משימת זמן" else "Reset Time Mission") },
-                                leadingContent = { Icon(Icons.Default.Refresh, null, tint = errorColor) }
                             )
 
                             ListItem(
@@ -254,7 +243,7 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                                     } catch (e: Exception) { viewModel.initData() }
                                 },
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                headlineContent = { Text(if (isHebrew) "הוסף 100 צעדים (מסונכרן)" else "Add 100 Steps (Synced)") },
+                                headlineContent = { Text(if (isHebrew) "הוסף 100 צעדים" else "Add 100 Steps (Synced)") },
                                 leadingContent = { Icon(Icons.Default.DirectionsWalk, null, tint = emeraldColor) }
                             )
 

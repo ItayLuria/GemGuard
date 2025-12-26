@@ -31,21 +31,38 @@ class TimeMissionReceiver : BroadcastReceiver() {
     private fun createTimeMission(context: Context) {
         val prefs = context.getSharedPreferences("GemGuardPrefs", Context.MODE_PRIVATE)
 
-        // --- 1. צעדים: בין 1000 ל-2000 בקפיצות של 50 ---
-        // הסבר: יש 21 אפשרויות (1000, 1050 ... 2000).
-        // אנחנו מגרילים מספר, כופלים ב-50 ומוסיפים למינימום.
-        val stepsSteps = (2000 - 1000) / 50 // כמה "קפיצות" יש
+        // --- 1. הגרלת יעד צעדים (בין 1000 ל-3000 בקפיצות של 50) ---
+        val stepsSteps = (3000 - 1000) / 50
         val stepsGoal = 1000 + (Random.nextInt(0, stepsSteps + 1) * 50)
 
-        // --- 2. יהלומים: בין 50 ל-150 בכפולות של 10 ---
-        val rewardSteps = (150 - 50) / 10
-        val reward = 50 + (Random.nextInt(0, rewardSteps + 1) * 10)
+        // --- 2. חישוב פרס לפי שלוש רמות (אופציות) של קושי ---
+        val reward = when {
+            // אופציה 1: משימה קלה (1000 עד 1950 צעדים)
+            stepsGoal < 2000 -> {
+                // פרס: בין 50 ל-100 (בקפיצות של 10)
+                val rewardChoices = (100 - 50) / 10
+                50 + (Random.nextInt(0, rewardChoices + 1) * 10)
+            }
 
-        // --- 3. זמן: תמיד שעה עגולה (60 דקות) ---
+            // אופציה 2: משימה בינונית (2000 עד 2500 צעדים)
+            stepsGoal <= 2500 -> {
+                // פרס: בין 100 ל-150 (בקפיצות של 10)
+                val rewardChoices = (150 - 100) / 10
+                100 + (Random.nextInt(0, rewardChoices + 1) * 10)
+            }
+
+            // אופציה 3: משימה קשה / מאתגרת (2550 עד 3000 צעדים)
+            else -> {
+                // פרס: בין 150 ל-200 (בקפיצות של 10)
+                val rewardChoices = (200 - 150) / 10
+                150 + (Random.nextInt(0, rewardChoices + 1) * 10)
+            }
+        }
+
+        // --- 3. זמן: שעה עגולה (ללא שינוי) ---
         val timeLimitMinutes = 60
         val endTime = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(timeLimitMinutes.toLong())
 
-        // שליפת הצעדים הכוללים העדכניים מה-Prefs
         val lastKnownTotalSteps = prefs.getInt("last_known_total_steps", 0)
 
         prefs.edit(commit = true) {

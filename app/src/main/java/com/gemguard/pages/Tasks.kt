@@ -247,7 +247,7 @@ fun TimeMissionCard(mission: TimeMission, viewModel: GemViewModel) {
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
-                                Text(if (isHebrew) "משימת בזק!" else "Flash Mission!", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                Text(if (isHebrew) "משימת זמן!" else "Time Mission!", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                                 if (remainingMillis > 0) {
                                     val minutes = (remainingMillis / 1000) / 60
                                     val seconds = (remainingMillis / 1000) % 60
