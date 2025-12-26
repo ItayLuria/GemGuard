@@ -48,14 +48,12 @@ fun SetupScreen(viewModel: GemViewModel, onComplete: () -> Unit) {
     val isHebrew = viewModel.language.value == "iw"
     val emeraldColor = Color(0xFF2ECC71)
 
-    // משתני PIN לניהול האימות
     var pinFirstEntry by remember { mutableStateOf("") }
     var pinConfirmEntry by remember { mutableStateOf("") }
     var showConfirmDialog by remember { mutableStateOf(false) }
 
     val currentStep by viewModel.setupStep
 
-    // --- פונקציות עזר לבדיקת הרשאות ---
     fun hasStepPermission(): Boolean = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED
     } else true
@@ -63,6 +61,7 @@ fun SetupScreen(viewModel: GemViewModel, onComplete: () -> Unit) {
     fun hasUsagePermission(): Boolean {
         val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
         val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            @Suppress("DEPRECATION")
             appOps.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, android.os.Process.myUid(), context.packageName)
         } else {
             @Suppress("DEPRECATION")
@@ -83,7 +82,6 @@ fun SetupScreen(viewModel: GemViewModel, onComplete: () -> Unit) {
         return enabledServicesSetting.contains(expectedComponentName.flattenToString())
     }
 
-    // מעבר אוטומטי בעת חזרה לאפליקציה (OnResume)
     DisposableEffect(lifecycleOwner, currentStep) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -103,19 +101,11 @@ fun SetupScreen(viewModel: GemViewModel, onComplete: () -> Unit) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // שימוש ב-Box עם imePadding מבטיח שהתוכן יזוז למעלה כשהמקלדת נפתחת
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .imePadding()
-    ) {
+    Box(modifier = Modifier.fillMaxSize().imePadding()) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
+            modifier = Modifier.fillMaxSize().padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // מחוון צעדים (8 נקודות)
             Row(
                 modifier = Modifier.padding(top = 10.dp, bottom = 30.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -134,19 +124,15 @@ fun SetupScreen(viewModel: GemViewModel, onComplete: () -> Unit) {
                 targetState = currentStep,
                 label = "SetupTransition",
                 transitionSpec = { fadeIn() togetherWith fadeOut() },
-                modifier = Modifier.weight(1f) // נותן לתוכן המשתנה לתפוס את הגובה הזמין
+                modifier = Modifier.weight(1f)
             ) { step ->
-                // ScrollState מאפשר גלילה רק בתוך שלב ספציפי אם המקלדת מסתירה חלק מהמידע
                 val stepScrollState = rememberScrollState()
-
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(stepScrollState)
+                    modifier = Modifier.fillMaxSize().verticalScroll(stepScrollState)
                 ) {
                     when (step) {
-                        0 -> { // שלב 0: בחירת שפה
+                        0 -> {
                             Icon(Icons.Default.Language, null, modifier = Modifier.size(70.dp), tint = emeraldColor)
                             Text(if(isHebrew) "ברוכים הבאים" else "Welcome", fontSize = 28.sp, fontWeight = FontWeight.Bold)
                             Text(if(isHebrew) "בחר את שפת הממשק" else "Choose language", color = Color.Gray)
@@ -156,18 +142,24 @@ fun SetupScreen(viewModel: GemViewModel, onComplete: () -> Unit) {
                                 OutlinedButton(
                                     onClick = { viewModel.setLanguage(code) },
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    shape = RoundedCornerShape(12.dp), // נוסף לעיצוב מרובע יותר
                                     border = BorderStroke(2.dp, if(selected) emeraldColor else Color.LightGray),
                                     colors = ButtonDefaults.outlinedButtonColors(containerColor = if(selected) emeraldColor.copy(alpha = 0.05f) else Color.Transparent)
                                 ) { Text(label, color = if(selected) emeraldColor else Color.Gray) }
                             }
                             InfoCard(if(isHebrew) "השפה שתבחר תחול על כל התפריטים וההתראות." else "Language affects all menus and notifications.")
                             Spacer(modifier = Modifier.weight(1f))
-                            Button(onClick = { viewModel.setupStep.intValue = 1 }, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)) {
+                            Button(
+                                onClick = { viewModel.setupStep.intValue = 1 }, 
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)
+                            ) {
                                 Text(if(isHebrew) "המשך" else "Continue", fontWeight = FontWeight.Bold)
                             }
                         }
 
-                        1 -> { // שלב 1: בחירת Dark/Light Mode
+                        1 -> {
                             Icon(if(viewModel.isDarkMode.value) Icons.Default.DarkMode else Icons.Default.LightMode, null, modifier = Modifier.size(70.dp), tint = emeraldColor)
                             Text(if(isHebrew) "מראה האפליקציה" else "App Appearance", fontSize = 24.sp, fontWeight = FontWeight.Bold)
                             Text(if(isHebrew) "בחר סגנון מועדף" else "Choose your style", color = Color.Gray)
@@ -194,12 +186,17 @@ fun SetupScreen(viewModel: GemViewModel, onComplete: () -> Unit) {
 
                             InfoCard(if(isHebrew) "ניתן לשנות זאת בכל עת בהגדרות." else "Can be changed anytime in settings.")
                             Spacer(modifier = Modifier.weight(1f))
-                            Button(onClick = { viewModel.setupStep.intValue = 2 }, modifier = Modifier.fillMaxWidth().height(56.dp), colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)) {
+                            Button(
+                                onClick = { viewModel.setupStep.intValue = 2 }, 
+                                modifier = Modifier.fillMaxWidth().height(56.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)
+                            ) {
                                 Text(if(isHebrew) "המשך" else "Continue", fontWeight = FontWeight.Bold)
                             }
                         }
 
-                        2 -> { // שלב 2: הגדרת PIN
+                        2 -> {
                             Icon(Icons.Default.Lock, null, modifier = Modifier.size(70.dp), tint = emeraldColor)
                             Text(if(isHebrew) "הגדר קוד נעילה" else "Set locking PIN", fontSize = 24.sp, fontWeight = FontWeight.Bold)
                             Spacer(modifier = Modifier.height(16.dp))
@@ -318,7 +315,7 @@ fun SetupScreen(viewModel: GemViewModel, onComplete: () -> Unit) {
                         )
 
                         7 -> PermissionStep(
-                            icon = Icons.Default.SettingsAccessibility, // שיניתי לאייקון נגישות רשמי יותר
+                            icon = Icons.Default.SettingsAccessibility, 
                             title = if(isHebrew) "שירותי נגישות" else "Accessibility Service",
                             desc = if(isHebrew) "לחסימה מאובטחת יותר" else "For secure blocking",
                             info = if(isHebrew) "שימוש בשירות הנגישות מבטיח שהחסימה לא תעקף על ידי שימוש בכפתור 'יישומים אחרונים' או פיצול מסך."
@@ -346,7 +343,7 @@ fun AppearanceOption(
     Surface(
         onClick = onClick,
         modifier = modifier.height(110.dp),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(12.dp), // שונה מ-16dp ל-12dp
         border = BorderStroke(if(isSelected) 2.dp else 1.dp, if(isSelected) emeraldColor else Color.LightGray.copy(alpha = 0.5f)),
         color = if(isSelected) emeraldColor.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface
     ) {
