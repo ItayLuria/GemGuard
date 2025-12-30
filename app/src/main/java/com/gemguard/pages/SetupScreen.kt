@@ -320,7 +320,7 @@ fun SetupScreen(viewModel: GemViewModel, onComplete: () -> Unit) {
                             desc = if(isHebrew) "לחסימה מאובטחת יותר" else "For secure blocking",
                             info = if(isHebrew) "שימוש בשירות הנגישות מבטיח שהחסימה לא תעקף על ידי שימוש בכפתור 'יישומים אחרונים' או פיצול מסך."
                             else "Accessibility ensures the lock cannot be bypassed using the recent apps button or split screen.",
-                            btnText = if(isHebrew) "הגדרת נגישות" else "Configure",
+                            btnText = if(isHebrew) "אשר בהגדרות" else "Allow in Settings",
                             onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
                         )
 
