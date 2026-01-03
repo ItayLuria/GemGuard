@@ -291,7 +291,7 @@ fun SetupScreen(viewModel: GemViewModel, onComplete: () -> Unit) {
                             icon = Icons.Default.NotificationsActive,
                             title = if(isHebrew) "התראות" else "Notifications",
                             desc = if(isHebrew) "הצגת זמני האפליקציות" else "Show remaining time",
-                            info = if(isHebrew) "נשלח התראות כשהזמן עומד להיגמר וכדי להציג טיימר פעיל." else "We notify you when app time is running out.",
+                            info = if(isHebrew) "נשלח התראות כשהזמן עומד להיגמר וכדי להציג טיימר פעיל." else "We will notify you when app time is running out.",
                             btnText = if(isHebrew) "אשר התראות" else "Allow",
                             onClick = { (context as? MainActivity)?.requestNotificationPermission() }
                         )
