@@ -1,71 +1,52 @@
-# GemGuard 💎 
-### Walk to Earn. Move to Unlock.
+# GemGuard 
+### Stop scrolling. Start walking.
 
 ![GemGuard Banner](https://github.com/ItayLuria/GemGuard/blob/968fcd9296d570a2990f0afaabacb1cd4004aea2/GemGuardBanner.png)
 
-**GemGuard** is a revolutionary digital wellbeing app that bridges the gap between physical activity and screen time. By gamifying app usage limits, GemGuard motivates users to stay active by turning daily steps into the only currency that can unlock their favorite apps.
+GemGuard is an Android app that limits screen time by requiring physical activity to unlock apps. Instead of just blocking apps, it turns your daily steps into "Gems" which you use to buy time packages for specific apps.
 
 ---
 
-## 🚀 The Concept
-Most app blockers just shut you out. **GemGuard** makes you earn your way back in. 
-In a world of mindless scrolling, GemGuard rewards your movement. Want 15 minutes on Instagram? You’ll need to "buy" it with Gems earned through walking.
+## How it works
+The app locks chosen applications behind a paywall of Gems. To get Gems, you have to move.
+If you want to spend 15 minutes on a social media app, you’ll need to complete step milestones or timed challenges first.
+
+### Main Features
+* **Step Milestones:** Earn Gems at 1k, 2.5k, 5k, 7.5k, and 10k steps. 
+* **Dynamic Economy:** The reward for a milestone drops if you completed it yesterday, and rises if you haven't—forcing you to stay consistent.
+* **Flash Quests:** Random timed challenges (e.g., walk 2000 steps in an hour) for bonus Gems.
+* **Usage-Based Pricing:** The shop automatically sorts apps by usage. Apps you use the most cost more Gems to unlock.
+* **Strict Blocking:** Once your purchased time is up, the app closes automatically and redirects you to the GemGuard dashboard.
 
 ---
 
-## ✨ Key Features
+## App Structure
 
-### 🎮 Gamified Economy (The Gems)
-- **Step Milestones:** Earn Gems by reaching daily targets: 1k, 2.5k, 5k, 7.5k, and 10k steps.
-- **Dynamic Rewards:** An intelligent algorithm adjusts Gem values. If you nailed a task yesterday, it's worth less today—pushing you to go further.
-- **Flash Quests:** Random daily challenges! Walk 1k-3k steps within an hour to win a tiered Gem reward.
-
-### 🛡️ Smart App Shield
-- **Time Packages:** Purchase app access in blocks: 5, 15, 30, or 60 minutes.
-- **Dynamic Pricing:** The more you use an app, the more it costs in Gems. Your habits dictate the price.
-- **Automatic Enforcement:** Once time is up, the app is blocked, and you're redirected back to GemGuard to choose: Walk more or Log off.
-
-### ⚙️ Full Control & Security
-- **Secure Setup:** Protected by a 4-digit PIN to prevent unauthorized setting changes.
-- **Custom Whitelist:** Choose essential apps (Maps, Phone, etc.) that are always accessible.
-- **Dark/Light Mode:** Full UI customization for the best user experience.
+* **Home:** Dashboard with a central step counter ring that glows green when a goal is reached.
+* **Tasks:** Where you claim Gems from your daily steps and view active Flash Quests.
+* **Shop:** Purchase 5, 15, 30, or 60-minute sessions for your blocked apps.
+* **Settings:** PIN-protected area to manage the Whitelist and app permissions.
 
 ---
 
-## 📱 App Structure
+## Setup & Tech Stack
+To function correctly, GemGuard requires specific Android permissions:
+* **Activity Recognition** (Step tracking)
+* **Usage Stats** (Monitoring app time)
+* **Display Over Other Apps** (Overlay for the blocking mechanism)
+* **Accessibility Service** (Preventing bypass and ensuring the lock stays active)
 
-| Page | Description |
-| :--- | :--- |
-| **Home** | The central hub. Features the **Glowing Step Ring** that lights up green when tasks are completed. |
-| **Tasks** | Claim your hard-earned Gems from daily milestones and participate in Flash Quests. |
-| **Shop** | Spend Gems on app time. Apps are sorted by usage—addictive apps cost more! |
-| **Settings** | PIN-protected area for Whitelist management, system permissions, and UI toggles. |
-
----
-
-## 🛠 Technical Implementation (For Developers)
-To provide a seamless and unblockable experience, GemGuard utilizes advanced Android permissions:
-* **Activity Recognition:** For real-time step tracking.
-* **Usage Stats:** To monitor app time and identify active packages.
-* **Display Over Other Apps:** To trigger the block overlay immediately when time expires.
-* **Accessibility Service:** Ensures the app cannot be easily bypassed or force-closed during protection.
+### Initial Setup
+1. Select Language & Theme.
+2. Set a 4-digit security PIN.
+3. Grant required system permissions.
+4. Select which apps to block/whitelist.
 
 ---
 
-## 💡 Catchphrases
-* *Step up your game, earn your screen time.*
-* *Your steps are the new currency.*
-* *Move more, scroll less.*
+## Note on Development
+This project was developed with **AI-assisted coding**. AI was used for architectural brainstorming, UI/UX logic, and documentation.
 
 ---
 
-## 🛠 Installation & Setup
-1. Choose your Language (Hebrew/English).
-2. Set your 4-digit security PIN.
-3. Grant necessary permissions (Activity, Usage, Overlay, Accessibility).
-4. **Start walking and take back control of your time!**
-
----
-
-### Developed by [Itay Luria] 
-*Modi'in, Israel* 🇮🇱
+### Developed by Itay Luria
