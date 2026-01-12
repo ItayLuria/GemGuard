@@ -5,19 +5,25 @@ import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.*
 import android.content.pm.PackageManager
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.*
-import com.gemguard.MainActivity
-class BlockService : Service() {
+
+class BlockService : Service(), SensorEventListener {
     private val notifiedApps = mutableSetOf<String>()
     private val serviceJob = Job()
     private val serviceScope = CoroutineScope(Dispatchers.Default + serviceJob)
 
     private var currentForegroundApp: String? = null
+    private lateinit var sensorManager: SensorManager
+    private var stepSensor: Sensor? = null
 
     private val systemSafePackages = listOf(
         "com.android.settings",
@@ -31,26 +37,27 @@ class BlockService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        // יצירת הערוץ כבר ב-onCreate כדי למנוע קריסות בהפעלה מהירה
         createNotificationChannel()
+        
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        stepSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
+        stepSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val notification = NotificationCompat.Builder(this, "block_service")
-            .setContentTitle("GemGuard פעיל")
-            .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
+            .setContentTitle("GemGuard Protection Active")
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_MIN) // פחות מציק למשתמש
+            .setPriority(NotificationCompat.PRIORITY_MIN)
             .build()
 
-        // שימוש ב-Foreground Service כדי שהמערכת לא תהרוג את החסימה
         startForeground(1, notification)
 
-        // התחלת לולאת הבדיקה
         serviceScope.launch {
             while (isActive) {
                 checkTopApp()
-                delay(250) // איזון בין מהירות תגובה לחיסכון בסוללה
+                delay(250)
             }
         }
 
@@ -59,16 +66,17 @@ class BlockService : Service() {
 
     private fun checkTopApp() {
         val prefs = getSharedPreferences("GemGuardPrefs", Context.MODE_PRIVATE)
+        if (prefs.getString("user_role", null) == "parent") {
+            stopSelf()
+            return
+        }
 
-        // בדיקה האם המשתמש כיבה את ההגנה ידנית
         val isServiceEnabled = prefs.getBoolean("service_enabled", true)
-        if (!isServiceEnabled) return
-
-        if (!prefs.getBoolean("setup_complete", false)) return
+        if (!isServiceEnabled || !prefs.getBoolean("setup_complete", false)) return
 
         val usageStatsManager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         val endTime = System.currentTimeMillis()
-        val startTime = endTime - 1000 // צמצום הטווח לחיפוש מהיר יותר
+        val startTime = endTime - 1000
 
         val events = usageStatsManager.queryEvents(startTime, endTime)
         val event = UsageEvents.Event()
@@ -93,23 +101,19 @@ class BlockService : Service() {
     }
 
     private fun shouldBlock(topApp: String, prefs: SharedPreferences): Boolean {
-        // רשימת החרגות: האפליקציה עצמה, הלאנצ'ר ומערכת
         if (topApp == packageName || isLauncherApp(topApp) || systemSafePackages.contains(topApp)) {
             return false
         }
 
-        // בדיקה ברשימת הלבנה (Whitelist)
         val whitelist = prefs.getString("whitelist", "")?.split(",") ?: listOf()
         if (whitelist.contains(topApp)) return false
 
-        // בדיקה האם האפליקציה נרכשה/פתוחה כרגע
         val expiryTime = prefs.getLong("unlock_$topApp", 0L)
-        if (expiryTime == 0L) return true // חסום אם מעולם לא נפתח
+        if (expiryTime == 0L) return true
 
         val currentTime = System.currentTimeMillis()
         val remaining = expiryTime - currentTime
 
-        // התראת דקה לסיום
         if (remaining in 1..60000 && !notifiedApps.contains(topApp)) {
             sendWarning(topApp)
             notifiedApps.add(topApp)
@@ -119,22 +123,17 @@ class BlockService : Service() {
     }
 
     private fun lockApp(packageName: String) {
-        // איפוס התראות לאפליקציה שנחסמה עכשיו
         notifiedApps.remove(packageName)
 
-        // זריקה למסך הבית (כדי לסגור את האפליקציה החסומה)
         val homeIntent = Intent(Intent.ACTION_MAIN).apply {
             addCategory(Intent.CATEGORY_HOME)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         startActivity(homeIntent)
 
-        // פתיחת דיאלוג החסימה בתוך האפליקציה שלנו
         Handler(Looper.getMainLooper()).postDelayed({
             val lockIntent = Intent(this, MainActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 putExtra("blocked_app", packageName)
             }
             startActivity(lockIntent)
@@ -154,8 +153,8 @@ class BlockService : Service() {
 
     private fun sendWarning(appName: String) {
         val n = NotificationCompat.Builder(this, "block_service")
-            .setContentTitle("זמן עומד להיגמר!")
-            .setContentText("נשאר פחות מדקה לשימוש ב-$appName")
+            .setContentTitle("Time is almost up!")
+            .setContentText("Less than a minute left for $appName")
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
@@ -176,8 +175,19 @@ class BlockService : Service() {
         }
     }
 
+    override fun onSensorChanged(event: SensorEvent?) {
+        if (event?.sensor?.type == Sensor.TYPE_STEP_COUNTER) {
+            val totalSteps = event.values[0].toInt()
+            val viewModel = GemViewModel(application)
+            viewModel.updateStepsOptimized(totalSteps)
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+
     override fun onDestroy() {
         serviceJob.cancel()
+        sensorManager.unregisterListener(this)
         super.onDestroy()
     }
 

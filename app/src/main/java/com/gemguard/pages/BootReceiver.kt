@@ -15,7 +15,6 @@ class BootReceiver : BroadcastReceiver() {
                 context.startService(serviceIntent)
             }
 
-            // Schedule the time mission to start
             TimeMissionReceiver.scheduleNextMission(context)
         }
     }
