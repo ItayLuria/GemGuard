@@ -55,6 +55,7 @@ android {
 }
 
 dependencies {
+    implementation("androidx.biometric:biometric:1.2.0-alpha05")
     implementation("androidx.media:media:1.6.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.compose.material:material-icons-extended")

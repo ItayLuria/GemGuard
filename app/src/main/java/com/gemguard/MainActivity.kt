@@ -1,5 +1,4 @@
 package com.gemguard
-
 import android.Manifest
 import android.app.AppOpsManager
 import android.content.*
@@ -8,7 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.hardware.*
 import android.os.*
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.animation.core.tween
@@ -50,8 +49,7 @@ import com.gemguard.pages.*
 import com.gemguard.ui.theme.GemGuardTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
-class MainActivity : ComponentActivity(), SensorEventListener {
+class MainActivity : FragmentActivity(), SensorEventListener {
     private val viewModel: GemViewModel by viewModels()
     private var blockedAppPackage by mutableStateOf<String?>(null)
     private lateinit var sensorManager: SensorManager

@@ -1,7 +1,11 @@
 package com.gemguard.pages
 
+import androidx.compose.ui.text.style.TextAlign
 import android.content.Context
+import android.content.Intent
+import android.provider.Settings
 import android.widget.Toast
+import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -22,15 +26,44 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import androidx.navigation.NavController
 import com.gemguard.BuildConfig
 import com.gemguard.GemViewModel
 import java.security.MessageDigest
 
 /**
- * פונקציית עזר להפיכת טקסט ל-Hash מסוג SHA-256
- * ממוקמת מחוץ ל-Composable כדי שתוכל לשמש את כל הקובץ
+ * פונקציית עזר להפעלת אימות ביומטרי
  */
+fun authenticateBiometric(
+    context: Context,
+    title: String,
+    onSuccess: () -> Unit
+) {
+    val executor = ContextCompat.getMainExecutor(context)
+    val biometricPrompt = BiometricPrompt(
+        context as FragmentActivity,
+        executor,
+        object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                super.onAuthenticationSucceeded(result)
+                onSuccess()
+            }
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                super.onAuthenticationError(errorCode, errString)
+            }
+        }
+    )
+
+    val promptInfo = BiometricPrompt.PromptInfo.Builder()
+        .setTitle(title)
+        .setNegativeButtonText("ביטול")
+        .build()
+
+    biometricPrompt.authenticate(promptInfo)
+}
+
 fun String.toSha256(): String {
     val bytes = MessageDigest.getInstance("SHA-256").digest(this.toByteArray())
     return bytes.joinToString("") { "%02x".format(it) }
@@ -44,19 +77,14 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
 
     val emeraldColor = Color(0xFF2ECC71)
     val errorColor = Color(0xFFE74C3C)
-
     val dialogContainerColor = if (isDark) Color(0xFF1E1E1E) else Color(0xFFFDFDFD)
     val textColor = if (isDark) Color.White else Color.Black
 
     val prefs = remember { context.getSharedPreferences("GemGuardPrefs", Context.MODE_PRIVATE) }
 
-    var isProtectionEnabled by remember {
-        mutableStateOf(prefs.getBoolean("service_enabled", true))
-    }
-
-    var isAdminModeActive by remember {
-        mutableStateOf(prefs.getBoolean("is_admin_mode", false))
-    }
+    var isProtectionEnabled by remember { mutableStateOf(prefs.getBoolean("service_enabled", true)) }
+    var isAdminModeActive by remember { mutableStateOf(prefs.getBoolean("is_admin_mode", false)) }
+    var isBiometricEnabled by remember { mutableStateOf(prefs.getBoolean("biometric_enabled", false)) }
 
     var showWhitelistPinDialog by remember { mutableStateOf(false) }
     var showDisablePinDialog by remember { mutableStateOf(false) }
@@ -81,6 +109,7 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
         Spacer(modifier = Modifier.height(20.dp))
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // --- נראות ושפה ---
             item { Text(if (isHebrew) "נראות ושפה" else "Appearance & Language", fontSize = 14.sp, color = Color.Gray) }
             item {
                 Card(
@@ -115,6 +144,7 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                 }
             }
 
+            // --- אבטחה וחסימות ---
             item { Spacer(modifier = Modifier.height(10.dp)) }
             item { Text(if (isHebrew) "אבטחה וחסימות" else "Security & Blocking", fontSize = 14.sp, color = Color.Gray) }
             item {
@@ -125,16 +155,7 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                     border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
                     Column {
-                        ListItem(
-                            modifier = Modifier.clickable { showWhitelistPinDialog = true },
-                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                            headlineContent = { Text(if (isHebrew) "ניהול Whitelist" else "Manage Whitelist") },
-                            supportingContent = { Text(if (isHebrew) "דרוש קוד גישה" else "Requires PIN") },
-                            leadingContent = { Icon(Icons.Default.Lock, null, tint = emeraldColor) }
-                        )
-
-                        HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
-
+                        // סטטוס הגנה - עכשיו הכי למעלה
                         ListItem(
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                             headlineContent = {
@@ -142,14 +163,6 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                                     if (isHebrew) "סטטוס הגנה" else "Protection Status",
                                     fontWeight = FontWeight.Bold,
                                     color = if (isProtectionEnabled) emeraldColor else errorColor
-                                )
-                            },
-                            supportingContent = {
-                                Text(
-                                    if (isProtectionEnabled)
-                                        (if (isHebrew) "פעיל - חסימות מופעלות" else "Active - Blocking enabled")
-                                    else
-                                        (if (isHebrew) "מושבת - אין חסימות" else "Disabled - No blocking")
                                 )
                             },
                             leadingContent = {
@@ -165,16 +178,41 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                                     onCheckedChange = { shouldEnable ->
                                         if (shouldEnable) {
                                             isProtectionEnabled = true
-                                            prefs.edit().putBoolean("service_enabled", true).commit()
-                                            Toast.makeText(context, if (isHebrew) "ההגנה הופעלה" else "Protection Enabled", Toast.LENGTH_SHORT).show()
+                                            prefs.edit().putBoolean("service_enabled", true).apply()
                                         } else {
                                             showDisablePinDialog = true
                                         }
                                     },
-                                    colors = SwitchDefaults.colors(
-                                        checkedTrackColor = emeraldColor,
-                                        uncheckedTrackColor = errorColor.copy(alpha = 0.5f)
-                                    )
+                                    colors = SwitchDefaults.colors(checkedTrackColor = emeraldColor, uncheckedTrackColor = errorColor.copy(alpha = 0.5f))
+                                )
+                            }
+                        )
+
+                        HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+
+                        ListItem(
+                            modifier = Modifier.clickable { showWhitelistPinDialog = true },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                            headlineContent = { Text(if (isHebrew) "ניהול Whitelist" else "Manage Whitelist") },
+                            supportingContent = { Text(if (isHebrew) "דרוש קוד גישה" else "Requires PIN") },
+                            leadingContent = { Icon(Icons.Default.Lock, null, tint = emeraldColor) }
+                        )
+
+                        HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
+
+                        ListItem(
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                            headlineContent = { Text(if (isHebrew) "זיהוי ביומטרי" else "Biometric Auth") },
+                            supportingContent = { Text(if (isHebrew) "אפשר אימות בטביעת אצבע" else "Enable fingerprint auth") },
+                            leadingContent = { Icon(Icons.Default.Fingerprint, null, tint = emeraldColor) },
+                            trailingContent = {
+                                Switch(
+                                    checked = isBiometricEnabled,
+                                    onCheckedChange = { enabled ->
+                                        isBiometricEnabled = enabled
+                                        prefs.edit().putBoolean("biometric_enabled", enabled).apply()
+                                    },
+                                    colors = SwitchDefaults.colors(checkedTrackColor = emeraldColor)
                                 )
                             }
                         )
@@ -182,9 +220,9 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                 }
             }
 
+            // --- אפשרויות מפתחים ---
             item { Spacer(modifier = Modifier.height(10.dp)) }
             item { Text(if (isHebrew) "אפשרויות מפתחים" else "Developer Options", fontSize = 14.sp, color = Color.Gray) }
-
             if (!isAdminModeActive) {
                 item {
                     Card(
@@ -215,36 +253,12 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                                 headlineContent = { Text(if (isHebrew) "הפעל משימת זמן" else "Trigger Time Mission") },
                                 leadingContent = { Icon(Icons.Default.Alarm, null, tint = emeraldColor) }
                             )
-
                             ListItem(
-                                modifier = Modifier.clickable {
-                                    viewModel.devAddDiamonds(100)
-                                },
+                                modifier = Modifier.clickable { viewModel.devAddDiamonds(100) },
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                                 headlineContent = { Text(if (isHebrew) "הוסף 100 יהלומים" else "Add 100 Gems") },
                                 leadingContent = { Icon(Icons.Default.Diamond, null, tint = emeraldColor) }
                             )
-
-                            ListItem(
-                                modifier = Modifier.clickable {
-                                    try {
-                                        val lastKnown = prefs.getInt("last_known_total_steps", 0)
-                                        val initialSteps = prefs.getInt("initial_steps", 0)
-                                        val newTotal = lastKnown + 100
-                                        val newInitial = initialSteps - 100
-                                        prefs.edit().apply {
-                                            putInt("last_known_total_steps", newTotal)
-                                            putInt("initial_steps", newInitial)
-                                            apply()
-                                        }
-                                        viewModel.updateStepsOptimized(newTotal)
-                                    } catch (e: Exception) { viewModel.initData() }
-                                },
-                                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                                headlineContent = { Text(if (isHebrew) "הוסף 100 צעדים" else "Add 100 Steps") },
-                                leadingContent = { Icon(Icons.Default.DirectionsWalk, null, tint = emeraldColor) }
-                            )
-
                             ListItem(
                                 modifier = Modifier.clickable {
                                     prefs.edit().clear().commit()
@@ -264,14 +278,16 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
         }
     }
 
+    // --- DIALOGS (ה-PIN הרחב והרווח המצומצם נשמרים כאן) ---
+
     if (showLanguageDialog) {
         AlertDialog(
             onDismissRequest = { showLanguageDialog = false },
             containerColor = dialogContainerColor,
-            titleContentColor = textColor,
-            title = { Text(if (isHebrew) "בחר שפה" else "Select Language", fontWeight = FontWeight.Bold, color = emeraldColor) },
+            title = { Text(if (isHebrew) "בחר שפה" else "Select Language", color = emeraldColor) },
+            confirmButton = { Button(onClick = { showLanguageDialog = false }) { Text(if (isHebrew) "סגור" else "Close") } },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     listOf("iw" to "עברית", "en" to "English").forEach { (code, label) ->
                         val isSelected = viewModel.language.value == code
                         Surface(
@@ -281,61 +297,11 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                                 showLanguageDialog = false
                             },
                             shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) emeraldColor.copy(alpha = 0.1f) else Color.Transparent,
-                            border = BorderStroke(if (isSelected) 2.dp else 1.dp, if (isSelected) emeraldColor else MaterialTheme.colorScheme.outlineVariant)
+                            border = BorderStroke(1.dp, if (isSelected) emeraldColor else Color.LightGray)
                         ) {
-                            Row(modifier = Modifier.padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(label, color = if (isSelected) emeraldColor else textColor)
-                                if (isSelected) Icon(Icons.Default.CheckCircle, null, tint = emeraldColor)
-                            }
+                            Text(label, modifier = Modifier.padding(15.dp), color = textColor)
                         }
                     }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = { showLanguageDialog = false },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)
-                ) {
-                    Text(if (isHebrew) "סגור" else "Close", color = Color.White)
-                }
-            }
-        )
-    }
-
-    if (showAdminLoginDialog) {
-        AlertDialog(
-            onDismissRequest = { showAdminLoginDialog = false; adminPasswordEntry = "" },
-            containerColor = dialogContainerColor,
-            title = { Text(if (isHebrew) "כניסת מפתח" else "Developer Login", fontWeight = FontWeight.Bold, color = emeraldColor) },
-            text = {
-                OutlinedTextField(
-                    value = adminPasswordEntry, onValueChange = { adminPasswordEntry = it },
-                    label = { Text(if (isHebrew) "סיסמה" else "Password") }, visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    shape = RoundedCornerShape(12.dp)
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (adminPasswordEntry.toSha256() == BuildConfig.ADMIN_PASSWORD) {
-                            isAdminModeActive = true
-                            prefs.edit().putBoolean("is_admin_mode", true).commit()
-                            showAdminLoginDialog = false
-                            adminPasswordEntry = ""
-                        } else {
-                            Toast.makeText(context, if (isHebrew) "סיסמה שגויה" else "Wrong Password", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)
-                ) { Text(if (isHebrew) "התחברות" else "Login") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAdminLoginDialog = false; adminPasswordEntry = "" }) {
-                    Text(if (isHebrew) "ביטול" else "Cancel", color = Color.Gray)
                 }
             }
         )
@@ -343,34 +309,55 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
 
     if (showWhitelistPinDialog) {
         AlertDialog(
-            onDismissRequest = { showWhitelistPinDialog = false; enteredPin = "" },
+            onDismissRequest = { showWhitelistPinDialog = false; enteredPin = ""; pinError = false },
             containerColor = dialogContainerColor,
-            title = { Text(if (isHebrew) "הכנס קוד גישה" else "Enter PIN", fontWeight = FontWeight.Bold, color = emeraldColor) },
+            title = {
+                Text(
+                    text = if (isHebrew) "הכנס קוד גישה" else "Enter PIN",
+                    color = emeraldColor,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = {
-                Column {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(
-                        value = enteredPin, onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) enteredPin = it },
-                        isError = pinError, label = { Text("PIN") }, visualTransformation = PasswordVisualTransformation(),
+                        value = enteredPin, onValueChange = { if (it.length <= 4) enteredPin = it },
+                        label = { Text("PIN") }, visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                        shape = RoundedCornerShape(12.dp)
+                        isError = pinError,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(0.8f)
                     )
-                    if (pinError) Text(if (isHebrew) "קוד שגוי" else "Incorrect PIN", color = errorColor, fontSize = 12.sp)
+                    if (isBiometricEnabled) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        TextButton(
+                            onClick = {
+                                authenticateBiometric(context, if (isHebrew) "גישה ל-Whitelist" else "Whitelist Access") {
+                                    showWhitelistPinDialog = false; showWhitelistDialog = true; enteredPin = ""; pinError = false
+                                }
+                            },
+                            colors = ButtonDefaults.textButtonColors(contentColor = textColor.copy(alpha = 0.6f))
+                        ) {
+                            Icon(Icons.Default.Fingerprint, null, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(if (isHebrew) "הזדהות ביומטרית" else "Biometric Auth")
+                        }
+                    }
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        if (enteredPin == viewModel.appPin.value) {
-                            showWhitelistPinDialog = false; showWhitelistDialog = true; enteredPin = ""; pinError = false
-                        } else pinError = true
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)
-                ) { Text(if (isHebrew) "אשר" else "Confirm") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showWhitelistPinDialog = false; enteredPin = "" }) {
-                    Text(if (isHebrew) "ביטול" else "Cancel", color = Color.Gray)
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Button(
+                        modifier = Modifier.fillMaxWidth(0.8f).height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = emeraldColor),
+                        onClick = {
+                            if (enteredPin == viewModel.appPin.value) {
+                                showWhitelistPinDialog = false; showWhitelistDialog = true; enteredPin = ""; pinError = false
+                            } else pinError = true
+                        }) { Text(if (isHebrew) "אשר" else "Confirm", fontWeight = FontWeight.Bold) }
                 }
             }
         )
@@ -378,61 +365,102 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
 
     if (showDisablePinDialog) {
         AlertDialog(
-            onDismissRequest = { showDisablePinDialog = false; enteredPin = "" },
+            onDismissRequest = { showDisablePinDialog = false; enteredPin = ""; pinError = false },
             containerColor = dialogContainerColor,
-            title = { Text(if (isHebrew) "הכנס קוד לביטול הגנה" else "PIN to Disable", fontWeight = FontWeight.Bold, color = errorColor) },
+            title = {
+                Text(
+                    text = if (isHebrew) "קוד לביטול הגנה" else "PIN to Disable",
+                    color = errorColor,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = {
-                Column {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     OutlinedTextField(
-                        value = enteredPin, onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) enteredPin = it },
-                        isError = pinError, label = { Text("PIN") }, visualTransformation = PasswordVisualTransformation(),
+                        value = enteredPin, onValueChange = { if (it.length <= 4) enteredPin = it },
+                        label = { Text("PIN") }, visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                        shape = RoundedCornerShape(12.dp)
+                        isError = pinError,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(0.8f)
                     )
-                    if (pinError) Text(if (isHebrew) "קוד שגוי" else "Incorrect PIN", color = errorColor, fontSize = 12.sp)
+                    if (isBiometricEnabled) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        TextButton(
+                            onClick = {
+                                authenticateBiometric(context, if (isHebrew) "ביטול הגנה" else "Disable Protection") {
+                                    showDisablePinDialog = false; showDisableConfirmDialog = true; enteredPin = ""; pinError = false
+                                }
+                            },
+                            colors = ButtonDefaults.textButtonColors(contentColor = textColor.copy(alpha = 0.6f))
+                        ) {
+                            Icon(Icons.Default.Fingerprint, null, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(if (isHebrew) "הזדהות ביומטרית" else "Biometric Auth")
+                        }
+                    }
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        if (enteredPin == viewModel.appPin.value) {
-                            showDisablePinDialog = false; showDisableConfirmDialog = true; enteredPin = ""; pinError = false
-                        } else pinError = true
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = errorColor)
-                ) { Text(if (isHebrew) "המשך" else "Continue") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDisablePinDialog = false; enteredPin = "" }) {
-                    Text(if (isHebrew) "ביטול" else "Cancel", color = Color.Gray)
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Button(
+                        modifier = Modifier.fillMaxWidth(0.8f).height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = errorColor),
+                        onClick = {
+                            if (enteredPin == viewModel.appPin.value) {
+                                showDisablePinDialog = false; showDisableConfirmDialog = true; enteredPin = ""; pinError = false
+                            } else pinError = true
+                        }) { Text(if (isHebrew) "המשך" else "Continue", fontWeight = FontWeight.Bold) }
                 }
             }
         )
     }
 
+    // שאר הדיאלוגים (DisableConfirmDialog, WhitelistDialog, AdminLoginDialog) ללא שינוי מבני
     if (showDisableConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showDisableConfirmDialog = false },
             containerColor = dialogContainerColor,
-            icon = { Icon(Icons.Default.Warning, null, tint = errorColor) },
-            title = { Text(if (isHebrew) "האם אתה בטוח?" else "Are you sure?", fontWeight = FontWeight.Bold) },
-            text = { Text(if (isHebrew) "פעולה זו תשבית את ההגנה." else "This will disable protection.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        isProtectionEnabled = false
-                        prefs.edit().putBoolean("service_enabled", false).commit()
-                        Toast.makeText(context, if (isHebrew) "ההגנה הושבתה" else "Protection Disabled", Toast.LENGTH_SHORT).show()
-                        showDisableConfirmDialog = false
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = errorColor)
-                ) { Text(if (isHebrew) "השבת" else "Disable") }
+            icon = { Icon(Icons.Default.WarningAmber, null, tint = errorColor, modifier = Modifier.size(36.dp)) },
+            title = {
+                Text(
+                    text = if (isHebrew) "ביטול הגנת האפליקציות" else "Disable App Protection",
+                    fontSize = 20.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(), color = textColor
+                )
             },
-            dismissButton = {
-                TextButton(onClick = { showDisableConfirmDialog = false }) {
-                    Text(if (isHebrew) "ביטול" else "Cancel", color = textColor)
+            text = {
+                Text(
+                    text = if (isHebrew) "האם אתה בטוח שברצונך להשבית את החסימה? פעולה זו תאפשר גישה חופשית."
+                    else "Are you sure you want to disable protection? This will allow unrestricted access.",
+                    textAlign = TextAlign.Center, fontSize = 15.sp, modifier = Modifier.fillMaxWidth(), color = textColor.copy(alpha = 0.8f)
+                )
+            },
+            confirmButton = {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)
+                ) {
+                    OutlinedButton(
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, textColor.copy(alpha = 0.2f)),
+                        onClick = { showDisableConfirmDialog = false }
+                    ) { Text(if (isHebrew) "חזור" else "Go Back", color = textColor) }
+
+                    Button(
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = errorColor),
+                        onClick = {
+                            isProtectionEnabled = false
+                            prefs.edit().putBoolean("service_enabled", false).apply()
+                            showDisableConfirmDialog = false
+                        }
+                    ) { Text(if (isHebrew) "השבת" else "Disable", fontWeight = FontWeight.Bold, textAlign = TextAlign.Center) }
                 }
             }
         )
@@ -448,12 +476,10 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
             containerColor = dialogContainerColor,
             title = {
                 Column {
-                    Text(if (isHebrew) "אפליקציות מותרות" else "Whitelisted Apps", fontWeight = FontWeight.Bold, color = emeraldColor)
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(if (isHebrew) "אפליקציות מותרות" else "Whitelisted Apps", color = emeraldColor)
                     OutlinedTextField(
                         value = whitelistSearchQuery, onValueChange = { whitelistSearchQuery = it },
-                        placeholder = { Text(if (isHebrew) "חפש..." else "Search...") },
-                        modifier = Modifier.fillMaxWidth(), leadingIcon = { Icon(Icons.Default.Search, null) },
+                        placeholder = { Text(if (isHebrew) "חפש..." else "Search...") }, modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp)
                     )
                 }
@@ -463,9 +489,9 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                     LazyColumn {
                         items(filteredApps, key = { it.packageName }) { app ->
                             val isChecked = viewModel.whitelistedApps.contains(app.packageName)
-                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { viewModel.toggleWhitelist(app.packageName) }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { viewModel.toggleWhitelist(app.packageName) }.padding(8.dp)) {
                                 Checkbox(checked = isChecked, onCheckedChange = { viewModel.toggleWhitelist(app.packageName) }, colors = CheckboxDefaults.colors(checkedColor = emeraldColor))
-                                Text(app.name, color = if (isChecked) emeraldColor else textColor, modifier = Modifier.weight(1f))
+                                Text(app.name, modifier = Modifier.weight(1f), color = textColor)
                             }
                         }
                     }
@@ -473,15 +499,42 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
             },
             confirmButton = {
                 Button(
-                    onClick = { viewModel.saveSettings(context); showWhitelistDialog = false },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(12.dp),
+                    onClick = { viewModel.saveSettings(context); showWhitelistDialog = false },
                     colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)
-                ) { Text(if (isHebrew) "שמור" else "Save") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showWhitelistDialog = false }) {
-                    Text(if (isHebrew) "ביטול" else "Cancel", color = Color.Gray)
+                ) { Text(if (isHebrew) "שמור" else "Save", fontWeight = FontWeight.Bold) }
+            }
+        )
+    }
+
+    if (showAdminLoginDialog) {
+        AlertDialog(
+            onDismissRequest = { showAdminLoginDialog = false; adminPasswordEntry = "" },
+            containerColor = dialogContainerColor,
+            title = { Text("Developer Login", color = emeraldColor, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) },
+            text = {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    OutlinedTextField(
+                        value = adminPasswordEntry, onValueChange = { adminPasswordEntry = it },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        label = { Text("Password") },
+                        shape = RoundedCornerShape(12.dp)
+                    )
                 }
+            },
+            confirmButton = {
+                Button(
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    onClick = {
+                        if (adminPasswordEntry.toSha256() == BuildConfig.ADMIN_PASSWORD) {
+                            isAdminModeActive = true
+                            prefs.edit().putBoolean("is_admin_mode", true).apply()
+                            showAdminLoginDialog = false; adminPasswordEntry = ""
+                        }
+                    }) { Text("Login", fontWeight = FontWeight.Bold) }
             }
         )
     }
