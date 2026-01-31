@@ -17,7 +17,7 @@ In a world of mindless scrolling, GemGuard rewards your movement. Want 15 minute
 
 ### Gamified Economy (The Gems)
 - **Step Milestones:** Earn Gems by reaching daily targets: 1k, 2.5k, 5k, 7.5k, and 10k steps.
-- **Dynamic Rewards:** An intelligent algorithm adjusts Gem values. If you nailed a task yesterday, it's worth less today—pushing you to go further.
+- **Dynamic Rewards:** An intelligent algorithm adjusts Gem values. If you nailed a task yesterday, it's worth less today pushing you to go further.
 - **Flash Quests:** Random daily challenges! Walk 1k-3k steps within an hour to win a tiered Gem reward.
 
 ###  Smart App Blocker
