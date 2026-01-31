@@ -1,12 +1,21 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
 
+// Load local properties
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.inputStream().use { localProperties.load(it) }
+}
+
 android {
     namespace = "com.gemguard"
-    compileSdk {
+    compileSdk { 
         version = release(36)
     }
 
@@ -18,6 +27,9 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Expose the admin password as a BuildConfig field
+        buildConfigField("String", "ADMIN_PASSWORD", "\"${localProperties.getProperty("admin.password").replace("\"", "")}\"")
     }
 
     buildTypes {
@@ -38,6 +50,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true // Enable BuildConfig generation
     }
 }
 

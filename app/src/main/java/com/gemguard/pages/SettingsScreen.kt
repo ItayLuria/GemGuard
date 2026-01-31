@@ -23,7 +23,18 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.gemguard.BuildConfig
 import com.gemguard.GemViewModel
+import java.security.MessageDigest
+
+/**
+ * פונקציית עזר להפיכת טקסט ל-Hash מסוג SHA-256
+ * ממוקמת מחוץ ל-Composable כדי שתוכל לשמש את כל הקובץ
+ */
+fun String.toSha256(): String {
+    val bytes = MessageDigest.getInstance("SHA-256").digest(this.toByteArray())
+    return bytes.joinToString("") { "%02x".format(it) }
+}
 
 @Composable
 fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
@@ -207,9 +218,7 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
 
                             ListItem(
                                 modifier = Modifier.clickable {
-                                    try {
-                                        viewModel.devAddDiamonds(100)
-                                    } catch (e: Exception) { viewModel.initData() }
+                                    viewModel.devAddDiamonds(100)
                                 },
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                                 headlineContent = { Text(if (isHebrew) "הוסף 100 יהלומים" else "Add 100 Gems") },
@@ -271,7 +280,7 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                                 viewModel.saveSettings(context)
                                 showLanguageDialog = false
                             },
-                            shape = RoundedCornerShape(16.dp),
+                            shape = RoundedCornerShape(12.dp),
                             color = if (isSelected) emeraldColor.copy(alpha = 0.1f) else Color.Transparent,
                             border = BorderStroke(if (isSelected) 2.dp else 1.dp, if (isSelected) emeraldColor else MaterialTheme.colorScheme.outlineVariant)
                         ) {
@@ -283,14 +292,14 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                     }
                 }
             },
-            confirmButton = { 
+            confirmButton = {
                 Button(
                     onClick = { showLanguageDialog = false },
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)
-                ) { 
-                    Text(if (isHebrew) "סגור" else "Close", color = Color.White) 
-                } 
+                ) {
+                    Text(if (isHebrew) "סגור" else "Close", color = Color.White)
+                }
             }
         )
     }
@@ -311,12 +320,15 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
             confirmButton = {
                 Button(
                     onClick = {
-                        if (adminPasswordEntry == "Admin") {
+                        if (adminPasswordEntry.toSha256() == BuildConfig.ADMIN_PASSWORD) {
                             isAdminModeActive = true
                             prefs.edit().putBoolean("is_admin_mode", true).commit()
                             showAdminLoginDialog = false
+                            adminPasswordEntry = ""
+                        } else {
+                            Toast.makeText(context, if (isHebrew) "סיסמה שגויה" else "Wrong Password", Toast.LENGTH_SHORT).show()
                         }
-                    }, 
+                    },
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)
                 ) { Text(if (isHebrew) "התחברות" else "Login") }
@@ -351,7 +363,7 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                         if (enteredPin == viewModel.appPin.value) {
                             showWhitelistPinDialog = false; showWhitelistDialog = true; enteredPin = ""; pinError = false
                         } else pinError = true
-                    }, 
+                    },
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)
                 ) { Text(if (isHebrew) "אשר" else "Confirm") }
@@ -386,7 +398,7 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                         if (enteredPin == viewModel.appPin.value) {
                             showDisablePinDialog = false; showDisableConfirmDialog = true; enteredPin = ""; pinError = false
                         } else pinError = true
-                    }, 
+                    },
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = errorColor)
                 ) { Text(if (isHebrew) "המשך" else "Continue") }
@@ -413,15 +425,15 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
                         prefs.edit().putBoolean("service_enabled", false).commit()
                         Toast.makeText(context, if (isHebrew) "ההגנה הושבתה" else "Protection Disabled", Toast.LENGTH_SHORT).show()
                         showDisableConfirmDialog = false
-                    }, 
+                    },
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = errorColor)
                 ) { Text(if (isHebrew) "השבת" else "Disable") }
             },
-            dismissButton = { 
-                TextButton(onClick = { showDisableConfirmDialog = false }) { 
-                    Text(if (isHebrew) "ביטול" else "Cancel", color = textColor) 
-                } 
+            dismissButton = {
+                TextButton(onClick = { showDisableConfirmDialog = false }) {
+                    Text(if (isHebrew) "ביטול" else "Cancel", color = textColor)
+                }
             }
         )
     }
@@ -461,7 +473,7 @@ fun SettingsScreen(navController: NavController, viewModel: GemViewModel) {
             },
             confirmButton = {
                 Button(
-                    onClick = { viewModel.saveSettings(context); showWhitelistDialog = false }, 
+                    onClick = { viewModel.saveSettings(context); showWhitelistDialog = false },
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = emeraldColor)
                 ) { Text(if (isHebrew) "שמור" else "Save") }
